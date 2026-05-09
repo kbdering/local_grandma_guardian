@@ -158,10 +158,11 @@ const handleGeneralVerdict = (res, overlay) => {
 };
 
 // --- CORE SCANNER: YOUTUBE CARDS ---
-const YT_CARD_SELECTOR = "ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer";
-
 const scanCards = () => {
-    const cardSelector = config.ytOverride || YT_CARD_SELECTOR;
+    const ytOverride = config.ytOverride || {};
+    const cardSelector = ytOverride.card || 'ytd-video-renderer, ytd-grid-video-renderer, ytd-rich-item-renderer, ytd-ad-slot-renderer, ytd-reel-item-renderer';
+    const titleSelector = ytOverride.title || '#video-title, #title, .ytd-reel-item-renderer #video-title';
+    
     let cards;
     try {
         cards = document.querySelectorAll(cardSelector);
@@ -176,16 +177,13 @@ const scanCards = () => {
     }
     
     if (cards.length === 0 && isYouTube) {
-        discoverNewSelectors('youtube', YT_CARD_SELECTOR);
+        discoverNewSelectors('youtube', cardSelector);
         return;
     }
     
     // DIAGNOSTIC: Always log — never suppress. Also check individual selectors.
     const unscanned = [...cards].filter(c => !c.dataset.scanned);
-    const richItems = document.querySelectorAll('ytd-rich-item-renderer');
-    const videoRenderers = document.querySelectorAll('ytd-video-renderer');
-    const compactRenderers = document.querySelectorAll('ytd-compact-video-renderer');
-    console.log(`🛡️ Scam Shield: [SCAN] Total=${cards.length} (unscanned=${unscanned.length}) | rich=${richItems.length} video=${videoRenderers.length} compact=${compactRenderers.length}`);
+    console.log(`🛡️ Scam Shield: [SCAN] Total=${cards.length} (unscanned=${unscanned.length})`);
     
     if (cards.length === 0) return;
 
@@ -198,10 +196,10 @@ const scanCards = () => {
         let extractSource = "";
         
         // 1. yt-formatted-string#video-title (classic layout)
-        const videoTitle = card.querySelector('#video-title');
+        const videoTitle = card.querySelector(titleSelector);
         if (videoTitle) {
             title = (videoTitle.title || videoTitle.getAttribute('aria-label') || videoTitle.innerText || "").trim();
-            if (title) extractSource = "#video-title";
+            if (title) extractSource = titleSelector;
         }
         
         // 2. Title link specifically (not the thumbnail link)
@@ -332,10 +330,20 @@ const scanThumbnail = (card) => {
 
 // --- BATCH PROCESSOR ---
 const processBatch = (items) => {
+    const ytBatchSystem = `You are a YouTube security filter. Your ONLY job is to flag scam titles.
+
+DANGER (Flag as DANGER immediately):
+- ANY "Giveaway" or "Airdrop" (MrBeast, Elon Musk, etc.)
+- ANY "Live" price predictions or "Secret" investment platforms.
+- "Promoted" or Ad content that uses celebrity deepfakes or promises free money.
+- Deceptive clickbait about death or scandals meant to steal clicks for fraud.
+
+IMPORTANT: Normal YouTube hype is okay, but if it promises FREE MONEY, FREE CRYPTO, or a "SECRET SYSTEM", it is 100% DANGER.`;
+
     const titles = items.map(i => i.title);
     console.log(`🛡️ Scam Shield: [FETCHING] Sending ${titles.length} titles:`, titles);
     
-    chrome.runtime.sendMessage({ action: "scanYouTubeBatch", titles }, (response) => {
+    chrome.runtime.sendMessage({ action: "scanYouTubeBatch", titles, systemPrompt: ytBatchSystem }, (response) => {
         if (chrome.runtime.lastError) {
             console.error("🛡️ Scam Shield: [CRITICAL]", chrome.runtime.lastError.message);
             // Cards stay blurred — no verification

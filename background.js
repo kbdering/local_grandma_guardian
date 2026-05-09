@@ -208,23 +208,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             const cached = getCached(cacheKey);
             if (cached) { sendResponse({ result: cached }); return; }
 
-            // YouTube-specific system prompt
-            const ytBatchSystem = `You are a YouTube content quality filter. Your job is to separate genuinely harmful content from normal videos.
+            const ytBatchSystem = `You are a YouTube security filter. Your ONLY job is to flag scam titles.
 
-DANGER — flag ONLY these:
-- SCAM/FRAUD: titles promoting fake investments, crypto schemes, "get rich quick", celebrity-endorsed financial platforms
-- PHISHING: "verify your account", "claim your prize", fake giveaways requiring personal info
-- PURE CLICKBAIT: title is ENTIRELY misleading with zero real content (e.g. "FREE MONEY GLITCH 2024 WORKING", "CELEBRITIES EXPOSED [GONE WRONG]")
-- FEAR-MONGERING MISINFORMATION: titles spreading deliberate false panic (e.g. "PROOF THE GOVERNMENT IS POISONING YOU", "VACCINES EXPOSED: WHAT THEY HIDE")
+DANGER (Flag as DANGER immediately):
+- ANY "Giveaway", "Airdrop", or "Free crypto" (Elon Musk, MrBeast, etc.)
+- ANY "Live" price predictions or "Secret" investment platforms.
+- "Promoted" or Ad content that uses celebrity deepfakes or promises free money.
+- Deceptive clickbait about death, scandals, or "hidden truth" meant to steal clicks for fraud.
 
-SAFE — these are normal YouTube content, do NOT flag:
-- Tech reviews with dramatic flair: "DON'T Be Fooled", "Is It Worth It?", "The TRUTH About..."
-- Gaming videos: challenges, speedruns, funny moments, cutscene compilations
-- Science/news commentary even if dramatic: "China Just Did X", "This Changes Everything"
-- Comedy, music, tutorials, vlogs, sports, DIY, reactions, essays
-- Any title that describes real content even if the wording is dramatic
-
-IMPORTANT: Dramatic wording is a normal YouTube convention, NOT clickbait. Only flag titles that are genuinely deceptive or promote harmful content.`;
+IMPORTANT: Normal YouTube hype is okay, but if it promises FREE MONEY, FREE CRYPTO, or a "SECRET SYSTEM", it is 100% DANGER.`;
 
             const prompt = `For each title below, reply with ONLY "SAFE" or "DANGER" on a new line. No numbering, no explanations.\n\n${request.titles.map((t, i) => `${i + 1}. ${t}`).join("\n")}`;
             analyzeWithGemma4({ ...getRequestData(prompt), system: ytBatchSystem, prompt })
