@@ -161,7 +161,13 @@ const handleGeneralVerdict = (res, overlay) => {
 const YT_CARD_SELECTOR = "ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer";
 
 const scanCards = () => {
-    const cards = document.querySelectorAll(YT_CARD_SELECTOR);
+    const cardSelector = config.ytOverride || YT_CARD_SELECTOR;
+    const cards = document.querySelectorAll(cardSelector);
+    
+    if (cards.length === 0 && isYouTube) {
+        discoverNewSelectors('youtube', YT_CARD_SELECTOR);
+        return;
+    }
     
     // DIAGNOSTIC: Always log — never suppress. Also check individual selectors.
     const unscanned = [...cards].filter(c => !c.dataset.scanned);
@@ -413,6 +419,31 @@ const scanWatchPage = () => {
 };
 
 // --- CORE SCANNER: FACEBOOK ---
+const discoverNewSelectors = (platform, sampleSelector) => {
+    if (window.scamShieldHealing) return;
+    window.scamShieldHealing = true;
+    
+    console.warn(`🛡️ Scam Shield: [HEALING] No ${platform} elements found. Attempting AI Self-Repair...`);
+    
+    // Grab a structure-only snapshot (tags and classes of top 50 divs)
+    const html = Array.from(document.querySelectorAll('div')).slice(0, 80).map(el => `<${el.tagName.toLowerCase()} class="${el.className}">`).join('\n');
+    
+    chrome.runtime.sendMessage({ action: "discoverSelectors", domain: host, html }, (res) => {
+        if (res && res.selector) {
+            console.log(`🛡️ Scam Shield: [HEALED] AI discovered new ${platform} selector: ${res.selector}`);
+            chrome.storage.local.get("config", (data) => {
+                const overrideKey = platform === 'facebook' ? 'fbOverride' : 'ytOverride';
+                const newConfig = { ...data.config, [overrideKey]: res.selector };
+                chrome.storage.local.set({ config: newConfig });
+                config[overrideKey] = res.selector;
+            });
+        }
+        // Allow healing again after some time if it failed
+        setTimeout(() => { window.scamShieldHealing = false; }, 60000);
+    });
+};
+
+// --- CORE SCANNER: FACEBOOK ---
 const scanFacebook = () => {
     // Use override if exists
     const cardSelector = config.fbOverride || siteSelectors.facebook.card;
@@ -422,24 +453,8 @@ const scanFacebook = () => {
     const chatBubbles = document.querySelectorAll(siteSelectors.facebook.chat);
     
     // HEALING MODE: If no posts found, trigger AI discovery
-    if (posts.length === 0 && chatBubbles.length === 0 && !window.scamShieldHealing) {
-        window.scamShieldHealing = true;
-        console.warn("🛡️ Scam Shield: [HEALING] No elements found. Attempting AI Self-Repair...");
-        
-        // Grab a structure-only snapshot of the page (tags and classes only)
-        const html = Array.from(document.querySelectorAll('div')).slice(0, 50).map(el => `<${el.tagName.toLowerCase()} class="${el.className}">`).join('\n');
-        
-        chrome.runtime.sendMessage({ action: "discoverSelectors", domain: host, html }, (res) => {
-            if (res && res.selector) {
-                console.log(`🛡️ Scam Shield: [HEALED] AI discovered new selector: ${res.selector}`);
-                chrome.storage.local.get("config", (data) => {
-                    const newConfig = { ...data.config, fbOverride: res.selector };
-                    chrome.storage.local.set({ config: newConfig });
-                    config.fbOverride = res.selector; // Update local state
-                });
-            }
-        });
-        
+    if (posts.length === 0 && chatBubbles.length === 0) {
+        discoverNewSelectors('facebook', siteSelectors.facebook.card);
         // Immediate fallback while waiting for AI
         posts = document.querySelectorAll('div > div > span[dir="auto"]');
     }
