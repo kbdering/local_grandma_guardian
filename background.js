@@ -408,19 +408,26 @@ async function analyzeWithGemma4(payload) {
 
                         if (json.done) {
                             hasResolved = true;
-                            // GLOBAL CLEANING
+                            // AGGRESSIVE VERDICT-FIRST CLEANING
                             let cleaned = fullText;
                             
-                            // 1. Strip explicit <think> tags
+                            // 1. Remove explicit <think> tags immediately
                             cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '');
                             
-                            // 2. Strip "Thinking Process:" headers and their following text until two newlines
-                            cleaned = cleaned.replace(/thinking process:[\s\S]*?\n\n/gi, '');
-                            cleaned = cleaned.replace(/thinking process:[\s\S]*?\n/gi, '');
+                            // 2. Find the first legitimate verdict token: [SAFE], [SUSPICIOUS], or [DANGEROUS]
+                            const verdictIndex = cleaned.search(/\[(SAFE|SUSPICIOUS|DANGEROUS|BEZPIECZN|PODEJRZAN|NIEBEZPIECZN)\]/i);
                             
-                            // 3. Remove common AI conversational filler
+                            if (verdictIndex !== -1) {
+                                // Crop everything BEFORE the verdict (Thinking Process, intros, etc.)
+                                cleaned = cleaned.substring(verdictIndex);
+                            } else {
+                                // Fallback: If no bracketed verdict, try to find a "Thinking Process:" and strip it
+                                cleaned = cleaned.replace(/thinking process:[\s\S]*?\n\n/gi, '');
+                                cleaned = cleaned.replace(/thinking process:[\s\S]*?\n/gi, '');
+                            }
+                            
+                            // 3. Final polish
                             cleaned = cleaned.replace(/^(here is the analysis:|analysis:|result:)\s*/gi, '');
-                            
                             cleaned = cleaned.trim();
 
                             if (!cleaned && fullThinking) {
@@ -429,7 +436,7 @@ async function analyzeWithGemma4(payload) {
                                 cleaned = verdictMatch ? verdictMatch[0].trim() : fullThinking.trim();
                                 console.warn("🛡️ Scam Shield: [WARN] Model response was empty, extracted verdict from thinking block.");
                             }
-                            console.log("🛡️ Scam Shield: AI Response Finalized (Cleaned). Length:", cleaned.length);
+                            console.log("🛡️ Scam Shield: AI Response Finalized (Aggressively Cleaned).");
                             resolve(cleaned);
                             break;
                         }
