@@ -442,8 +442,8 @@ const initialScan = () => {
     window.scamShieldInitialDone = true;
     
     injectOverlay();
-    console.log("🛡️ Scam Shield: [INITIAL SCAN] Checking page safety (Text + Visual)...");
-    const text = document.body ? document.body.innerText.substring(0, 15000) : "";
+    console.log("🛡️ Scam Shield: [INITIAL SCAN] Checking page safety (Full Text + Visual)...");
+    const text = document.body ? document.body.innerText : "";
     chrome.runtime.sendMessage(
         { action: "scanFullPage", text, url: window.location.href, domain: host, isVisual: true }, 
         (res) => handleGeneralVerdict(res, globalOverlay)
@@ -557,9 +557,9 @@ const startWatchdog = () => {
         if (!isYouTube && !isFacebook && window.scamShieldInitialDone && config.enablePeriodicScan) {
             const now = Date.now();
             if (!window.lastPeriodicScan || (now - window.lastPeriodicScan > 30000)) {
-                console.log("🛡️ Scam Shield: [PERIODIC] Running silent re-scan (Text + Visual)...");
+                console.log("🛡️ Scam Shield: [PERIODIC] Running silent re-scan (Full Text + Visual)...");
                 window.lastPeriodicScan = now;
-                const text = document.body ? document.body.innerText.substring(0, 15000) : "";
+                const text = document.body ? document.body.innerText : "";
                 chrome.runtime.sendMessage(
                     { action: "scanFullPage", text, url: window.location.href, domain: host, isVisual: true },
                     (res) => {
