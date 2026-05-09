@@ -1,0 +1,65 @@
+{
+    "extName": {
+        "message": "Grandma's Protective Shield"
+    },
+    "extDesc": {
+        "message": "Proactive local AI protection. Blocks malicious sites, Facebook posts, and chat scams."
+    },
+    "checkingPage": {
+        "message": "Checking page safety..."
+    },
+    "warningTitle": {
+        "message": "🚨 WARNING"
+    },
+    "goBackBtn": {
+        "message": "Go back to safety"
+    },
+    "emailHelp": {
+        "message": "Email grandchild for help"
+    },
+    "blockedPost": {
+        "message": "🚨 Shield blocked a dangerous post."
+    },
+    "chatWarning": {
+        "message": "🚨 AI Warning: Potential scam attempt."
+    },
+    "stopTransfer": {
+        "message": "🛑 STOP! 🛑"
+    },
+    "transferText": {
+        "message": "You are trying to transfer"
+    },
+    "transferQuestions": {
+        "message": "Is any of the following true?<ul><li>Someone on the phone is telling you to do this.</li><li>You are sending money to 'fix' your computer.</li><li>You are sending money to a government agency or police.</li><li>You are returning an 'accidental' overpayment.</li></ul>"
+    },
+    "callGrandchild": {
+        "message": "Call your grandchild first"
+    },
+    "cancelTransfer": {
+        "message": "Cancel this transfer"
+    },
+    "forceProceed": {
+        "message": "I am paying a real bill. Let me proceed."
+    },
+    "trustSiteBtn": {
+        "message": "Trust this site"
+    },
+    "trustedSites": {
+        "message": "Trusted sites:"
+    },
+    "visualScan": {
+        "message": "Performing deep visual scan..."
+    },
+    "blockedVisual": {
+        "message": "🚨 Shield blocked a malicious image post."
+    },
+    "scanningTitle": {
+        "message": "🛡️ SHIELD IS CHECKING"
+    },
+    "scanningDesc": {
+        "message": "Please wait, we are verifying if this page is safe for you..."
+    },
+    "marketplaceAlert": {
+        "message": "🚨 WARNING: This page looks like an OLX/InPost scam! Do not click anything."
+    }
+}

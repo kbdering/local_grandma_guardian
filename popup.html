@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {
+            width: 250px;
+            padding: 15px;
+            font-family: sans-serif;
+            text-align: center;
+            background: #f9f9f9;
+        }
+
+        h3 {
+            margin-top: 0;
+            color: #4285f4;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            background: #4caf50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        button:hover {
+            background: #388e3c;
+        }
+
+        #status {
+            font-size: 12px;
+            color: #555;
+        }
+
+        #listContainer {
+            margin-top: 15px;
+            text-align: left;
+            max-height: 150px;
+            overflow-y: auto;
+            background: white;
+            border: 1px solid #ddd;
+            padding: 5px;
+            border-radius: 4px;
+        }
+
+        .domain-item {
+            font-size: 11px;
+            padding: 3px 0;
+            border-bottom: 1px solid #eee;
+            color: #333;
+        }
+    </style>
+</head>
+
+<body>
+    <h3>🛡️ Tarcza Babci</h3>
+    <button id="trustBtn"></button>
+    <div id="status"></div>
+
+    <div id="trustedSitesLabel" style="margin-top: 15px; font-size: 12px; font-weight: bold; text-align: left;"></div>
+    <div id="listContainer"></div>
+
+    <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
+    
+    <div style="text-align: left;">
+        <h4 style="margin: 0 0 10px; font-size: 13px;">Ustawienia Ochrony:</h4>
+        <div class="setting-item">
+            <input type="checkbox" id="flag-ytCards"> <label for="flag-ytCards">YouTube: Miniatury</label>
+        </div>
+        <div class="setting-item">
+            <input type="checkbox" id="flag-ytWatch"> <label for="flag-ytWatch">YouTube: Odtwarzacz</label>
+        </div>
+        <div class="setting-item">
+            <input type="checkbox" id="flag-fb"> <label for="flag-fb">Facebook / Messenger</label>
+        </div>
+        <div class="setting-item">
+            <input type="checkbox" id="flag-periodic"> <label for="flag-periodic">Skanowanie okresowe</label>
+        </div>
+        <div class="setting-item">
+            <input type="checkbox" id="flag-speech"> <label for="flag-speech">Monitorowanie mowy 🎤</label>
+        </div>
+        <div class="setting-item">
+            <input type="checkbox" id="flag-overlay"> <label for="flag-overlay">Blokada nieznanych stron</label>
+        </div>
+        <div class="setting-item">
+            <input type="checkbox" id="flag-automicro"> <label for="flag-automicro">Auto-zezwolenie na mikrofon</label>
+        </div>
+    </div>
+
+    <div style="text-align: left; margin-top: 15px;">
+        <h4 style="margin: 0 0 10px; font-size: 13px;">Zaawansowane (AI):</h4>
+        <div class="advanced-item">
+            <label>Model:</label>
+            <input type="text" id="ai-model" style="width: 100%; margin-top: 4px;">
+        </div>
+        <div class="advanced-item" style="margin-top: 8px;">
+            <label>URL API:</label>
+            <input type="text" id="ai-url" style="width: 100%; margin-top: 4px;">
+        </div>
+        <div class="advanced-item" style="margin-top: 8px;">
+            <label>Klucz API (opcjonalny):</label>
+            <input type="password" id="ai-key" style="width: 100%; margin-top: 4px;">
+        </div>
+        <button id="saveAiBtn" style="margin-top: 12px; padding: 6px; font-size: 11px; background: #4285f4;">Zapisz AI</button>
+    </div>
+
+    <style>
+        .advanced-item {
+            font-size: 11px;
+            color: #666;
+        }
+        .advanced-item input {
+            padding: 4px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .setting-item {
+            font-size: 12px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+        }
+        .setting-item input {
+            margin-right: 8px;
+        }
+        h4 { color: #333; }
+    </style>
+
+    <script src="config.js"></script>
+    <script src="popup.js"></script>
+</body>
+
+</html>

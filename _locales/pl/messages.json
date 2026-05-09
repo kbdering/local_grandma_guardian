@@ -1,0 +1,65 @@
+{
+    "extName": {
+        "message": "Tarcza Ochronna Babci"
+    },
+    "extDesc": {
+        "message": "Proaktywna lokalna ochrona AI. Blokuje złośliwe strony, posty na Facebooku i oszustwa na czacie."
+    },
+    "checkingPage": {
+        "message": "Sprawdzanie bezpieczeństwa strony..."
+    },
+    "warningTitle": {
+        "message": "🚨 OSTRZEŻENIE"
+    },
+    "goBackBtn": {
+        "message": "Wróć w bezpieczne miejsce"
+    },
+    "emailHelp": {
+        "message": "Napisz do wnuka o pomoc"
+    },
+    "blockedPost": {
+        "message": "🚨 Tarcza zablokowała niebezpieczny post."
+    },
+    "chatWarning": {
+        "message": "🚨 Ostrzeżenie AI: Potencjalna próba oszustwa."
+    },
+    "stopTransfer": {
+        "message": "🛑 ZATRZYMAJ SIĘ! 🛑"
+    },
+    "transferText": {
+        "message": "Próbujesz przelać"
+    },
+    "transferQuestions": {
+        "message": "Czy którekolwiek z poniższych jest prawdą?<ul><li>Ktoś przez telefon każe Ci to zrobić.</li><li>Wysyłasz pieniądze, aby 'naprawić' swój komputer.</li><li>Wysyłasz pieniądze do ZUS-u, urzędu lub na policję.</li><li>Zwracasz 'przypadkowy przelew' lub nadpłatę.</li></ul>"
+    },
+    "callGrandchild": {
+        "message": "Zadzwoń najpierw do wnuka"
+    },
+    "cancelTransfer": {
+        "message": "Anuluj ten przelew"
+    },
+    "forceProceed": {
+        "message": "Opłacam prawdziwy rachunek. Pozwól mi wykonać przelew."
+    },
+    "trustSiteBtn": {
+        "message": "Zaufaj tej stronie"
+    },
+    "trustedSites": {
+        "message": "Zaufane strony:"
+    },
+    "visualScan": {
+        "message": "Przeprowadzanie głębokiego skanu wizualnego..."
+    },
+    "blockedVisual": {
+        "message": "🚨 Tarcza zablokowała złośliwy post graficzny."
+    },
+    "scanningTitle": {
+        "message": "🛡️ TARCZA SPRAWDZA STRONĘ"
+    },
+    "scanningDesc": {
+        "message": "Proszę czekaj, sprawdzamy czy ta strona jest bezpieczna dla Ciebie..."
+    },
+    "marketplaceAlert": {
+        "message": "🚨 UWAGA: Ta strona wygląda jak oszustwo na OLX/InPost! Proszę nic nie klikać."
+    }
+}

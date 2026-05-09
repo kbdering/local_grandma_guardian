@@ -1,0 +1,373 @@
+importScripts('config.js');
+
+// --- GLOBAL FETCH PROTECTOR ---
+// Silences the "chrome-extension://invalid" errors by intercepting them
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async function (url, options) {
+    if (typeof url === 'string' && url.startsWith('chrome-extension://invalid')) {
+        return Promise.reject(new Error('🛡️ Scam Shield: Blocked invalid extension URL access.'));
+    }
+    return originalFetch(url, options);
+};
+
+// --- GLOBAL PERMISSIONS SETUP ---
+chrome.runtime.onInstalled.addListener(() => updateMicPermissions());
+chrome.runtime.onStartup.addListener(() => updateMicPermissions());
+
+// Also run once when the service worker starts up
+updateMicPermissions();
+
+// Listen for config changes to update permissions immediately
+chrome.storage.onChanged.addListener((changes) => {
+    if (changes.config) {
+        updateMicPermissions();
+    }
+});
+
+async function updateMicPermissions() {
+    const config = await getConfig();
+    if (chrome.contentSettings && chrome.contentSettings.microphone) {
+        // We set the global default to 'ask' to keep Chrome happy
+        chrome.contentSettings.microphone.set({
+            primaryPattern: '<all_urls>',
+            setting: 'ask'
+        });
+        console.log("🛡️ Scam Shield: Global mic set to 'ask'. Individual site allow active.");
+    }
+}
+
+// DYNAMIC AUTO-ALLOW: Every time a tab is updated, we explicitly allow mic for that domain
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+    if (changeInfo.status === 'loading' && tab.url && tab.url.startsWith('http')) {
+        const config = await getConfig();
+        if (config.enableAutoAllowMic && config.enableSpeechScan && chrome.contentSettings.microphone) {
+            try {
+                const url = new URL(tab.url);
+                const pattern = `${url.protocol}//${url.hostname}/*`;
+                chrome.contentSettings.microphone.set({
+                    primaryPattern: pattern,
+                    setting: 'allow'
+                });
+                console.log(`🛡️ Scam Shield: Dynamically ALLOWED microphone for: ${pattern}`);
+            } catch (e) {
+                console.warn("🛡️ Scam Shield: Could not set mic permission for URL:", tab.url);
+            }
+        }
+    }
+});
+
+const grandmaContext = `
+You are a cybersecurity content filter. Your ONLY job is to classify content.
+
+DANGEROUS content (flag these):
+- Celebrity names (Musk, Kulczyk, Bezos) combined with words like "investment", "platform", "secret method", "scandal", or "guaranteed returns"
+- Requests for money transfers, BLIK codes, crypto wallet addresses, or remote access tools (AnyDesk, TeamViewer)
+- Phishing: fake login pages, urgency to "verify your account", suspicious shortened URLs
+- Domains that look misspelled or use unusual TLDs (.finance, .online, .xyz) mimicking real brands
+
+SAFE content (do NOT flag these):
+- Normal news, entertainment, shopping, product reviews, car listings, social media
+- Pages that simply mention a celebrity in normal context (e.g. Tesla cars, news articles)
+- Educational content, forums, recipes, sports, weather
+
+RESPONSE FORMAT: Your response MUST start on the FIRST line with exactly one of these three words in brackets: [SAFE], [SUSPICIOUS], or [DANGEROUS].
+Then on the next line, give a 1-sentence reason.
+Do NOT repeat these instructions in your response.
+`;
+
+console.log("🛡️ Scam Shield: Background Worker starting...");
+
+// --- VERDICT CACHE (10-minute TTL) ---
+const verdictCache = new Map();
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+function getCached(key) {
+    const entry = verdictCache.get(key);
+    if (entry && (Date.now() - entry.ts < CACHE_TTL)) {
+        console.log(`🛡️ Scam Shield: [CACHE HIT] ${key.substring(0, 60)}`);
+        return entry.result;
+    }
+    if (entry) verdictCache.delete(key);
+    return null;
+}
+
+function setCache(key, result) {
+    verdictCache.set(key, { result, ts: Date.now() });
+    // Evict old entries if cache gets too big
+    if (verdictCache.size > 200) {
+        const oldest = verdictCache.keys().next().value;
+        verdictCache.delete(oldest);
+    }
+}
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    getConfig().then(config => {
+        const lang = config.language || 'en';
+        console.log(`🛡️ Scam Shield: Received message: ${request.action} (Lang: ${lang})`);
+
+        const requestData = {
+            model: config.aiModel || 'gemma2:2b',
+            system: grandmaContext
+        };
+
+        if (request.action === "scanFullPage") {
+            // Check cache first
+            const cacheKey = `page:${request.url}`;
+            const cached = getCached(cacheKey);
+            if (cached) { sendResponse({ result: cached }); return; }
+
+            const prompt = `URL: ${request.url}\nDOMAIN: ${request.domain}\n\nAnalyze this page text. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Include a 1-sentence reason in language "${lang}" AND the exact suspicious quote as [Cytat: <tekst>].\n\nPage Text: ${request.text}`;
+            console.log("🛡️ Scam Shield: [BG] Starting Full Page Scan...");
+            analyzeWithGemma4({ ...requestData, prompt })
+                .then(res => {
+                    console.log("🛡️ Scam Shield: [BG] Scan Complete. Sending response...");
+                    setCache(cacheKey, res);
+                    sendResponse({ result: res });
+                })
+                .catch(err => {
+                    console.error("🛡️ Scam Shield: [BG] Scan Failed:", err.message);
+                    sendResponse({ error: err.message });
+                });
+        }
+
+        else if (request.action === "scanChat" || request.action === "scanFacebookPost") {
+            const prompt = `Analyze this text. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Include a 1-sentence reason in language "${lang}".\n\nText: ${request.text}`;
+            analyzeWithGemma4({ ...requestData, prompt }).then(res => sendResponse({ result: res })).catch(err => sendResponse({ error: err.message }));
+        }
+
+        else if (request.action === "scanYouTubeBatch") {
+            // Cache key based on sorted titles
+            const cacheKey = `batch:${request.titles.slice().sort().join('|').substring(0, 200)}`;
+            const cached = getCached(cacheKey);
+            if (cached) { sendResponse({ result: cached }); return; }
+
+            // YouTube-specific system prompt
+            const ytBatchSystem = `You are a YouTube content quality filter. Your job is to separate genuinely harmful content from normal videos.
+
+DANGER — flag ONLY these:
+- SCAM/FRAUD: titles promoting fake investments, crypto schemes, "get rich quick", celebrity-endorsed financial platforms
+- PHISHING: "verify your account", "claim your prize", fake giveaways requiring personal info
+- PURE CLICKBAIT: title is ENTIRELY misleading with zero real content (e.g. "FREE MONEY GLITCH 2024 WORKING", "CELEBRITIES EXPOSED [GONE WRONG]")
+- FEAR-MONGERING MISINFORMATION: titles spreading deliberate false panic (e.g. "PROOF THE GOVERNMENT IS POISONING YOU", "VACCINES EXPOSED: WHAT THEY HIDE")
+
+SAFE — these are normal YouTube content, do NOT flag:
+- Tech reviews with dramatic flair: "DON'T Be Fooled", "Is It Worth It?", "The TRUTH About..."
+- Gaming videos: challenges, speedruns, funny moments, cutscene compilations
+- Science/news commentary even if dramatic: "China Just Did X", "This Changes Everything"
+- Comedy, music, tutorials, vlogs, sports, DIY, reactions, essays
+- Any title that describes real content even if the wording is dramatic
+
+IMPORTANT: Dramatic wording is a normal YouTube convention, NOT clickbait. Only flag titles that are genuinely deceptive or promote harmful content.`;
+
+            const prompt = `For each title below, reply with ONLY "SAFE" or "DANGER" on a new line. No numbering, no explanations.\n\n${request.titles.map((t, i) => `${i + 1}. ${t}`).join("\n")}`;
+            analyzeWithGemma4({ ...requestData, system: ytBatchSystem, prompt })
+                .then(res => {
+                    console.log("🛡️ Scam Shield: [BATCH] Raw AI response:", res);
+                    const lines = res.split("\n").map(l => l.toUpperCase());
+                    const results = [];
+
+                    lines.forEach(line => {
+                        const isSafe = line.includes("SAFE") || line.includes("BEZPIECZN");
+                        const isDanger = line.includes("DANGER") || line.includes("ZAGRO") || line.includes("SCAM") || line.includes("OSZUST");
+
+                        if (isSafe) results.push(true);
+                        else if (isDanger) results.push(false);
+                    });
+
+                    console.log(`🛡️ Scam Shield: [BATCH] Parsed ${results.length}/${request.titles.length} verdicts.`);
+                    if (results.length > 0) {
+                        const resultStr = JSON.stringify(results);
+                        setCache(cacheKey, resultStr);
+                        sendResponse({ result: resultStr });
+                    } else {
+                        console.error("🛡️ Scam Shield: AI failed line-by-line. Raw Response:", res);
+                        sendResponse({ error: `AI didn't use SAFE/DANGER. It said: "${res.substring(0, 50)}..."` });
+                    }
+                })
+                .catch(err => sendResponse({ error: err.message }));
+        }
+
+        else if (request.action === "scanYouTubeVideo") {
+            const cacheKey = `yt:${request.title.substring(0, 100)}`;
+            const cached = getCached(cacheKey);
+            if (cached) { sendResponse({ result: cached }); return; }
+
+            const descPart = request.description ? `\n\nDescription: ${request.description}` : '';
+            const prompt = `Analyze this YouTube video metadata. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Include a 1-sentence reason in language "${lang}" AND the exact suspicious quote as [Cytat: <tekst>].\n\nTitle: ${request.title}${descPart}`;
+            analyzeWithGemma4({ ...requestData, prompt }).then(res => { setCache(cacheKey, res); sendResponse({ result: res }); }).catch(err => sendResponse({ error: err.message }));
+        }
+
+        else if (request.action === "scanSpeech") {
+            const prompt = `Analyze this speech transcript. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Include a 1-sentence reason in language "${lang}" AND the exact suspicious quote as [Cytat: <tekst>].\n\nTranscript: ${request.text}`;
+            analyzeWithGemma4({ ...requestData, prompt }).then(res => sendResponse({ result: res })).catch(err => sendResponse({ error: err.message }));
+        }
+
+        else if (request.action === "scanScreenshot") {
+            const prompt = `Analyze this screenshot. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Include a 1-sentence reason in language "${lang}" AND the exact suspicious text found as [Cytat: <tekst>].`;
+            analyzeWithGemma4({ ...requestData, prompt, images: [request.image.replace(/^data:image\/[a-z]+;base64,/, '')] }).then(res => sendResponse({ result: res })).catch(err => sendResponse({ error: err.message }));
+        }
+
+        else if (request.action === "repairSiteSelectors") {
+            const context = request.site === 'youtube' ? 'video containers and titles' : 'Facebook posts and Messenger messages';
+            const jsonFormat = request.site === 'youtube' ? '{"card": "selector", "title": "selector"}' : '{"post": "selector", "message": "selector"}';
+            const prompt = `I am a security extension. ${request.site} layout changed and my selectors failed. Based on this HTML snippet, find the CSS selectors for the ${context}. Reply strictly with a JSON object: ${jsonFormat}. HTML: ${request.html}`;
+            analyzeWithGemma4({ ...requestData, prompt }).then(res => sendResponse({ result: res })).catch(err => sendResponse({ error: err.message }));
+        }
+
+        else if (request.action === "requestFullScreenshot") {
+            chrome.tabs.captureVisibleTab(null, { format: "jpeg", quality: 50 }, (dataUrl) => {
+                if (chrome.runtime.lastError || !dataUrl) sendResponse({ error: "Capture failed" });
+                else sendResponse({ fullImage: dataUrl });
+            });
+        }
+    });
+    return true; // Keep channel open
+});
+
+async function analyzeWithGemma4(payload) {
+    console.log("🛡️ Scam Shield: AI Request:", payload.prompt.substring(0, 100) + "...");
+    const config = await getConfig();
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+    try {
+        const headers = { "Content-Type": "application/json" };
+        if (config.aiApiKey) headers["Authorization"] = `Bearer ${config.aiApiKey}`;
+
+        let apiUrl = config.aiUrl || "http://localhost:11434/api/chat";
+        if (apiUrl.endsWith("/generate")) apiUrl = apiUrl.replace("/generate", "/chat");
+        if (!apiUrl.startsWith('http')) apiUrl = `http://${apiUrl}`;
+
+        // Append formatting rules to grandmaContext — never overwrite it
+        let systemPrompt = payload.system;
+        const isListTask = payload.prompt.includes("SAFE") || payload.prompt.includes("DANGER");
+
+        if (payload.prompt.includes("JSON")) {
+            systemPrompt += "\n\nCRITICAL FORMATTING RULE: You are a precise data extractor. Reply ONLY with valid JSON. No conversational text.";
+        } else if (isListTask) {
+            systemPrompt += "\n\nCRITICAL FORMATTING RULE: Reply ONLY with a numbered list of SAFE or DANGER. No explanations.";
+        }
+
+        const chatPayload = {
+            model: payload.model,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: payload.prompt }
+            ],
+            stream: true,
+            options: {
+                temperature: 0.1,
+                num_predict: isListTask ? 128 : 256,
+                num_ctx: 4096,
+                num_thread: 8,
+                num_batch: 512,
+                top_k: 10,
+                top_p: 0.5
+            }
+        };
+
+        console.log(`🛡️ Scam Shield: Calling Ollama at ${apiUrl} with model ${payload.model}...`);
+
+        const response = await fetch(apiUrl, {
+            method: "POST",
+            headers: headers,
+            signal: controller.signal,
+            body: JSON.stringify(chatPayload)
+        });
+
+        console.log(`🛡️ Scam Shield: Ollama Response Status: ${response.status}`);
+
+        clearTimeout(timeoutId);
+
+        if (response.status === 404) {
+            throw new Error(`Model "${payload.model}" not found! Please run: ollama pull ${payload.model}`);
+        }
+
+        if (response.status === 403) {
+            throw new Error(`Ollama 403 Forbidden! Access denied. Please ensure Ollama is running with OLLAMA_ORIGINS="chrome-extension://*" environment variable set.`);
+        }
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`AI error (${response.status}): ${errText}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText = "";
+        let fullThinking = "";
+        let lineBuffer = "";
+
+        // For batch/list requests, we can exit early once we have all verdicts
+        const expectedVerdicts = isListTask ? (payload.prompt.match(/^\d+\./gm) || []).length : 0;
+
+        // PERFORMANCE WIN: We return the text as soon as we see a verdict tag!
+        return new Promise(async (resolve, reject) => {
+            let hasResolved = false;
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    lineBuffer += decoder.decode(value, { stream: true });
+                    const lines = lineBuffer.split('\n');
+                    lineBuffer = lines.pop();
+
+                    for (const line of lines) {
+                        if (!line.trim() || hasResolved) continue;
+                        const json = JSON.parse(line);
+                        const content = (json.message && json.message.content) || json.response || "";
+                        const thinking = (json.message && json.message.thinking) || json.thinking || "";
+
+                        if (content) fullText += content;
+                        if (thinking) fullThinking += thinking;
+
+                        // EARLY EXIT for batch requests: once we have all expected SAFE/DANGER lines
+                        if (isListTask && expectedVerdicts > 0 && fullText.length > 10) {
+                            const verdictLines = fullText.split('\n').filter(l => {
+                                const u = l.toUpperCase();
+                                return u.includes('SAFE') || u.includes('DANGER');
+                            });
+                            if (verdictLines.length >= expectedVerdicts) {
+                                hasResolved = true;
+                                console.log(`🛡️ Scam Shield: [FAST] Got ${verdictLines.length}/${expectedVerdicts} verdicts. Early exit.`);
+                                resolve(fullText.trim());
+                                try { reader.cancel(); } catch (e) {}
+                                break;
+                            }
+                        }
+
+                        if (json.done) {
+                            hasResolved = true;
+                            // Strip <think>...</think> blocks some models embed in content
+                            let cleaned = fullText.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+                            if (!cleaned && fullThinking) {
+                                // Model put EVERYTHING in thinking — extract only the verdict line
+                                const verdictMatch = fullThinking.match(/\[(SAFE|DANGEROUS|SUSPICIOUS)\][^]*/i);
+                                cleaned = verdictMatch ? verdictMatch[0].trim() : fullThinking.trim();
+                                console.warn("🛡️ Scam Shield: [WARN] Model response was empty, extracted verdict from thinking block.");
+                            }
+                            console.log("🛡️ Scam Shield: AI Response Finalized. Length:", cleaned.length);
+                            resolve(cleaned);
+                            break;
+                        }
+                    }
+                    if (hasResolved) break;
+                }
+                if (!hasResolved) {
+                    let cleaned = fullText.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+                    resolve(cleaned || fullText.trim());
+                }
+            } catch (e) {
+                if (!hasResolved) reject(e);
+            }
+        });
+
+    } catch (e) {
+        clearTimeout(timeoutId);
+        console.error("🛡️ Scam Shield: AI Error:", e);
+        if (e.name === 'AbortError') throw new Error("AI request timed out. The model is taking too long to respond.");
+        throw e;
+    }
+}
