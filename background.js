@@ -116,18 +116,34 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             const cached = getCached(cacheKey);
             if (cached) { sendResponse({ result: cached }); return; }
 
-            const prompt = `URL: ${request.url}\nDOMAIN: ${request.domain}\n\nAnalyze this page text. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Include a 1-sentence reason in language "${lang}" AND the exact suspicious quote as [Cytat: <tekst>].\n\nPage Text: ${request.text}`;
-            console.log("🛡️ Scam Shield: [BG] Starting Full Page Scan...");
-            analyzeWithGemma4({ ...requestData, prompt })
-                .then(res => {
-                    console.log("🛡️ Scam Shield: [BG] Scan Complete. Sending response...");
-                    setCache(cacheKey, res);
-                    sendResponse({ result: res });
-                })
-                .catch(err => {
-                    console.error("🛡️ Scam Shield: [BG] Scan Failed:", err.message);
-                    sendResponse({ error: err.message });
+            const analyze = (imageData) => {
+                const prompt = `URL: ${request.url}\nDOMAIN: ${request.domain}\n\nAnalyze this page ${imageData ? 'text and screenshot' : 'text'}. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Include a 1-sentence reason in language "${lang}" AND the exact suspicious quote as [Cytat: <tekst>].\n\nPage Text: ${request.text}`;
+                console.log(`🛡️ Scam Shield: [BG] Starting Full Page Scan (${request.text.length} chars${imageData ? ' + Image' : ''})...`);
+                analyzeWithGemma4({ ...requestData, prompt, images: imageData ? [imageData] : [] })
+                    .then(res => {
+                        console.log("🛡️ Scam Shield: [BG] Scan Complete. Sending response...");
+                        setCache(cacheKey, res);
+                        sendResponse({ result: res });
+                    })
+                    .catch(err => {
+                        console.error("🛡️ Scam Shield: [BG] Scan Failed:", err.message);
+                        sendResponse({ error: err.message });
+                    });
+            };
+
+            // Capture screenshot if requested and it's the active tab
+            if (request.isVisual) {
+                chrome.tabs.captureVisibleTab(null, { format: 'jpeg', quality: 40 }, (dataUrl) => {
+                    if (chrome.runtime.lastError || !dataUrl) {
+                        analyze(null); // Fallback to text only
+                    } else {
+                        analyze(dataUrl.replace(/^data:image\/[a-z]+;base64,/, ''));
+                    }
                 });
+            } else {
+                analyze(null);
+            }
+            return true; // Keep channel open for async capture
         }
 
         else if (request.action === "scanChat" || request.action === "scanFacebookPost") {
