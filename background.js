@@ -126,7 +126,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             if (cached) { sendResponse({ result: cached }); return; }
 
             const analyze = (imageData) => {
-                const prompt = `URL: ${request.url}\nDOMAIN: ${request.domain}\n\nAnalyze this page ${imageData ? 'text and screenshot' : 'text'}. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Include a 1-sentence reason in language "${lang}" AND the exact suspicious quote as [Cytat: <tekst>].\n\nPage Text: ${request.text}`;
+                const prompt = `URL: ${request.url}\nDOMAIN: ${request.domain}\n\nAnalyze this page ${imageData ? 'text and screenshot' : 'text'}. Page Text: ${request.text}\n\nSTRICT RULE: YOUR RESPONSE MUST START WITH [SAFE], [SUSPICIOUS], OR [DANGEROUS]. DO NOT THINK ALOUD.`;
                 console.log(`🛡️ Scam Shield: [BG] Starting Full Page Scan (${request.text.length} chars, ctx: ${estimateCtx(prompt)})...`);
                 
                 analyzeWithGemma4({ ...getRequestData(prompt), prompt, images: imageData ? [imageData] : [] })
@@ -306,14 +306,11 @@ async function analyzeWithGemma4(payload) {
         if (apiUrl.endsWith("/generate")) apiUrl = apiUrl.replace("/generate", "/chat");
         if (!apiUrl.startsWith('http')) apiUrl = `http://${apiUrl}`;
 
-        // Append formatting rules to grandmaContext — never overwrite it
         let systemPrompt = payload.system;
         const isListTask = payload.prompt.includes("SAFE") || payload.prompt.includes("DANGER");
 
         if (payload.prompt.includes("JSON")) {
-            systemPrompt += "\n\nCRITICAL FORMATTING RULE: You are a precise data extractor. Reply ONLY with valid JSON. No conversational text.";
-        } else if (isListTask) {
-            systemPrompt += "\n\nCRITICAL FORMATTING RULE: Reply ONLY with a numbered list of SAFE or DANGER. No explanations.";
+            systemPrompt += "\n\nCRITICAL: Reply ONLY with valid JSON.";
         }
 
         const chatPayload = {
@@ -323,53 +320,29 @@ async function analyzeWithGemma4(payload) {
                 { role: 'user', content: payload.prompt }
             ],
             stream: true,
-            options: {
+            options: payload.options || {
                 temperature: 0.1,
-                num_predict: isListTask ? 128 : 256,
-                num_ctx: 4096,
-                num_thread: 8,
-                num_batch: 512,
-                top_k: 10,
-                top_p: 0.5
+                num_ctx: 4096
             }
         };
 
-        console.log(`🛡️ Scam Shield: Calling Ollama at ${apiUrl} with model ${payload.model}...`);
-
         const response = await fetch(apiUrl, {
             method: "POST",
-            headers: headers,
-            signal: controller.signal,
-            body: JSON.stringify(chatPayload)
+            headers,
+            body: JSON.stringify(chatPayload),
+            signal: controller.signal
         });
 
-        console.log(`🛡️ Scam Shield: Ollama Response Status: ${response.status}`);
-
         clearTimeout(timeoutId);
-
-        if (response.status === 404) {
-            throw new Error(`Model "${payload.model}" not found! Please run: ollama pull ${payload.model}`);
-        }
-
-        if (response.status === 403) {
-            throw new Error(`Ollama 403 Forbidden! Access denied. Please ensure Ollama is running with OLLAMA_ORIGINS="chrome-extension://*" environment variable set.`);
-        }
-
-        if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(`AI error (${response.status}): ${errText}`);
-        }
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let fullText = "";
         let fullThinking = "";
         let lineBuffer = "";
-
-        // For batch/list requests, we can exit early once we have all verdicts
         const expectedVerdicts = isListTask ? (payload.prompt.match(/^\d+\./gm) || []).length : 0;
 
-        // PERFORMANCE WIN: We return the text as soon as we see a verdict tag!
         return new Promise(async (resolve, reject) => {
             let hasResolved = false;
             try {
@@ -390,7 +363,6 @@ async function analyzeWithGemma4(payload) {
                         if (content) fullText += content;
                         if (thinking) fullThinking += thinking;
 
-                        // EARLY EXIT for batch requests: once we have all expected SAFE/DANGER lines
                         if (isListTask && expectedVerdicts > 0 && fullText.length > 10) {
                             const verdictLines = fullText.split('\n').filter(l => {
                                 const u = l.toUpperCase();
@@ -398,7 +370,6 @@ async function analyzeWithGemma4(payload) {
                             });
                             if (verdictLines.length >= expectedVerdicts) {
                                 hasResolved = true;
-                                console.log(`🛡️ Scam Shield: [FAST] Got ${verdictLines.length}/${expectedVerdicts} verdicts. Early exit.`);
                                 resolve(fullText.trim());
                                 try { reader.cancel(); } catch (e) {}
                                 break;
@@ -407,56 +378,41 @@ async function analyzeWithGemma4(payload) {
 
                         if (json.done) {
                             hasResolved = true;
-                            // AGGRESSIVE LAST-VERDICT CLEANING
                             let cleaned = fullText;
-                            
-                            // 1. Remove explicit <think> tags immediately
                             cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '');
-                            
-                            // 2. Find the LAST legitimate verdict token: [SAFE], [SUSPICIOUS], or [DANGEROUS]
                             const verdictRegex = /\[(SAFE|SUSPICIOUS|DANGEROUS|BEZPIECZN|PODEJRZAN|NIEBEZPIECZN)\]/gi;
                             const matches = Array.from(cleaned.matchAll(verdictRegex));
                             
                             if (matches.length > 0) {
-                                // Pick the LAST match (the AI's final conclusion)
-                                const lastMatch = matches[matches.length - 1];
-                                cleaned = cleaned.substring(lastMatch.index);
+                                cleaned = cleaned.substring(matches[matches.length - 1].index);
                             } else {
-                                // Fallback: If no bracketed verdict, try to find a "Thinking Process:" and strip it
-                                cleaned = cleaned.replace(/thinking process:[\s\S]*?\n\n/gi, '');
-                                cleaned = cleaned.replace(/thinking process:[\s\S]*?\n/gi, '');
+                                cleaned = cleaned.replace(/thinking process:[\s\S]*?(\n\n|\[)/gi, '[');
+                                cleaned = cleaned.replace(/1\.\s+\*\*analyze the request:\*\*[\s\S]*?(\n\n|\[)/gi, '[');
+                                cleaned = cleaned.replace(/thinking process:[\s\S]*/gi, '');
                             }
                             
-                            // 3. Final polish
                             cleaned = cleaned.replace(/^(here is the analysis:|analysis:|result:)\s*/gi, '');
                             cleaned = cleaned.trim();
 
                             if (!cleaned && fullThinking) {
-                                // Model put EVERYTHING in thinking — extract only the verdict line
                                 const verdictMatch = Array.from(fullThinking.matchAll(verdictRegex)).pop();
                                 cleaned = verdictMatch ? verdictMatch[0].trim() : fullThinking.trim();
-                                console.warn("🛡️ Scam Shield: [WARN] Model response was empty, extracted final verdict from thinking block.");
                             }
-                            console.log("🛡️ Scam Shield: AI Response Finalized (Last-Verdict Logic).");
+                            console.log("🛡️ Scam Shield: AI Response Finalized.");
                             resolve(cleaned);
                             break;
                         }
                     }
                     if (hasResolved) break;
                 }
-                if (!hasResolved) {
-                    let cleaned = fullText.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-                    resolve(cleaned || fullText.trim());
-                }
+                if (!hasResolved) resolve(fullText.trim());
             } catch (e) {
                 if (!hasResolved) reject(e);
             }
         });
-
     } catch (e) {
         clearTimeout(timeoutId);
         console.error("🛡️ Scam Shield: AI Error:", e);
-        if (e.name === 'AbortError') throw new Error("AI request timed out. The model is taking too long to respond.");
         throw e;
     }
 }
