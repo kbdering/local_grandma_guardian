@@ -447,6 +447,9 @@ const startSpeechScan = () => {
     if (!config.enableSpeechScan) return;
     if (speechRecognition) return;
     
+    // ONLY start if the tab is visible to avoid competing with other tabs for the mic
+    if (document.visibilityState !== 'visible') return;
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
         console.warn("🛡️ Scam Shield: Speech Recognition not supported in this browser.");
@@ -469,29 +472,51 @@ const startSpeechScan = () => {
     };
     
     speechRecognition.onerror = (event) => {
-        if (event.error !== 'no-speech' && event.error !== 'network' && event.error !== 'not-allowed') {
+        if (event.error !== 'no-speech' && event.error !== 'network' && event.error !== 'not-allowed' && event.error !== 'aborted') {
             console.warn("🛡️ Scam Shield: Speech error:", event.error);
         }
         // Don't auto-restart on network/permission errors
-        if (event.error === 'network' || event.error === 'not-allowed') {
+        if (event.error === 'network' || event.error === 'not-allowed' || event.error === 'aborted') {
             speechRecognition = null;
         }
     };
     
     speechRecognition.onend = () => {
-        // Auto-restart if still enabled
-        if (config.enableSpeechScan && speechRecognition) {
+        // Auto-restart if still enabled AND tab is visible
+        if (config.enableSpeechScan && speechRecognition && document.visibilityState === 'visible') {
             try { speechRecognition.start(); } catch (e) {}
+        } else {
+            speechRecognition = null;
         }
     };
-    
+
     try {
         speechRecognition.start();
         console.log("🛡️ Scam Shield: 🎙️ Speech monitoring ACTIVE.");
     } catch (e) {
         console.warn("🛡️ Scam Shield: Could not start speech recognition:", e.message);
+        speechRecognition = null;
         return;
     }
+};
+
+// Handle tab switching: stop mic on hidden, start on visible (global listener)
+if (!window.scamShieldSpeechInited) {
+    window.scamShieldSpeechInited = true;
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            if (config.enableSpeechScan && !speechRecognition) {
+                startSpeechScan();
+            }
+        } else {
+            if (speechRecognition) {
+                const sr = speechRecognition;
+                speechRecognition = null; // Prevent onend auto-restart
+                try { sr.stop(); } catch(e) {}
+            }
+        }
+    });
+}
     
     // Periodically send accumulated transcript for analysis
     setInterval(() => {
