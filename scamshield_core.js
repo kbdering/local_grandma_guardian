@@ -38,6 +38,8 @@ let siteSelectors = {
     }
 };
 
+const YT_CARD_SELECTOR = 'ytd-video-renderer, ytd-grid-video-renderer, ytd-rich-item-renderer, ytd-ad-slot-renderer, ytd-reel-item-renderer';
+
 let globalOverlay = null;
 
 // --- STYLING (IRON CURTAIN) ---
@@ -151,7 +153,7 @@ const handleGeneralVerdict = (res, overlay) => {
 // --- CORE SCANNER: YOUTUBE CARDS ---
 const scanCards = () => {
     const ytOverride = config.ytOverride || {};
-    const cardSelector = ytOverride.card || 'ytd-video-renderer, ytd-grid-video-renderer, ytd-rich-item-renderer, ytd-ad-slot-renderer, ytd-reel-item-renderer';
+    const cardSelector = ytOverride.card || YT_CARD_SELECTOR;
     const titleSelector = ytOverride.title || '#video-title, #title, .ytd-reel-item-renderer #video-title';
     
     let cards;
