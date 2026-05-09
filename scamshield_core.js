@@ -357,7 +357,7 @@ const scanWatchPage = () => {
     const titleEl = document.querySelector("h1.ytd-watch-metadata yt-formatted-string, h1.title yt-formatted-string, #title h1");
     if (!titleEl) return;
     
-    const title = titleEl.innerText.trim();
+    const title = (titleEl && titleEl.innerText) ? titleEl.innerText.trim() : "";
     if (!title) return;
     
     window.scamShieldWatchScanned = true;
@@ -375,7 +375,7 @@ const scanWatchPage = () => {
     }
     
     const descEl = document.querySelector("#description-inline-expander, #description");
-    const description = descEl ? descEl.innerText.substring(0, 500) : "";
+    const description = (descEl && descEl.innerText) ? descEl.innerText.substring(0, 500) : "";
     
     chrome.runtime.sendMessage({ action: "scanYouTubeVideo", title, description }, (res) => {
         if (res && res.result) {
