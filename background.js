@@ -126,8 +126,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             if (cached) { sendResponse({ result: cached }); return; }
 
             const analyze = (imageData) => {
-                const prompt = `URL: ${request.url}\nDOMAIN: ${request.domain}\n\nAnalyze this page ${imageData ? 'text and screenshot' : 'text'}. Page Text: ${request.text}\n\nSTRICT RULE: YOUR RESPONSE MUST START WITH [SAFE], [SUSPICIOUS], OR [DANGEROUS]. DO NOT THINK ALOUD.`;
-                console.log(`🛡️ Scam Shield: [BG] Starting Full Page Scan (${request.text.length} chars, ctx: ${estimateCtx(prompt)})...`);
+                const prompt = `URL: ${request.url}\nDOMAIN: ${request.domain}\n\nAnalyze this page ${imageData ? 'text and screenshot' : 'text'}. Page Text: ${request.text}\n\nSTRICT RULES:\n1. YOUR RESPONSE MUST START WITH [SAFE], [SUSPICIOUS], OR [DANGEROUS].\n2. EXPLAIN THE REASON AND QUOTE (Cytat) STRICTLY IN LANGUAGE: "${lang}".\n3. DO NOT THINK ALOUD.`;
+                console.log(`🛡️ Scam Shield: [BG] Starting Full Page Scan (${request.text.length} chars, ctx: ${estimateCtx(prompt)}, lang: ${lang})...`);
                 
                 analyzeWithGemma4({ ...getRequestData(prompt), prompt, images: imageData ? [imageData] : [] })
                     .then(res => {
@@ -180,7 +180,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
         else if (request.action === "scanChat" || request.action === "scanFacebookPost") {
             const analyze = (imageData) => {
-                const prompt = `Analyze this ${imageData ? 'text and image' : 'text'}. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Include a 1-sentence reason in language "${lang}".\n\nText: ${request.text}`;
+                const prompt = `Analyze this ${imageData ? 'text and image' : 'text'}. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. EXPLAIN THE REASON STRICTLY IN LANGUAGE: "${lang}".\n\nText: ${request.text}`;
                 analyzeWithGemma4({ ...getRequestData(prompt), prompt, images: imageData ? [imageData] : [] })
                     .then(res => sendResponse({ result: res }))
                     .catch(err => sendResponse({ error: err.message }));
@@ -260,17 +260,17 @@ IMPORTANT: Dramatic wording is a normal YouTube convention, NOT clickbait. Only 
             if (cached) { sendResponse({ result: cached }); return; }
 
             const descPart = request.description ? `\n\nDescription: ${request.description}` : '';
-            const prompt = `Analyze this YouTube video metadata. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Include a 1-sentence reason in language "${lang}" AND the exact suspicious quote as [Cytat: <tekst>].\n\nTitle: ${request.title}${descPart}`;
+            const prompt = `Analyze this YouTube video metadata. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. EXPLAIN THE REASON AND QUOTE (Cytat) STRICTLY IN LANGUAGE: "${lang}".\n\nTitle: ${request.title}${descPart}`;
             analyzeWithGemma4({ ...getRequestData(prompt), prompt }).then(res => { setCache(cacheKey, res); sendResponse({ result: res }); }).catch(err => sendResponse({ error: err.message }));
         }
 
         else if (request.action === "scanSpeech") {
-            const prompt = `Analyze this speech transcript. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Include a 1-sentence reason in language "${lang}" AND the exact suspicious quote as [Cytat: <tekst>].\n\nTranscript: ${request.text}`;
+            const prompt = `Analyze this speech transcript. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. EXPLAIN THE REASON AND QUOTE (Cytat) STRICTLY IN LANGUAGE: "${lang}".\n\nTranscript: ${request.text}`;
             analyzeWithGemma4({ ...getRequestData(prompt), prompt }).then(res => sendResponse({ result: res })).catch(err => sendResponse({ error: err.message }));
         }
 
         else if (request.action === "scanScreenshot") {
-            const prompt = `Analyze this screenshot. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Include a 1-sentence reason in language "${lang}" AND the exact suspicious text found as [Cytat: <tekst>].`;
+            const prompt = `Analyze this screenshot. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. EXPLAIN THE REASON AND QUOTE (Cytat) STRICTLY IN LANGUAGE: "${lang}".`;
             analyzeWithGemma4({ ...getRequestData(prompt), prompt, images: [request.image.replace(/^data:image\/[a-z]+;base64,/, '')] }).then(res => sendResponse({ result: res })).catch(err => sendResponse({ error: err.message }));
         }
 
