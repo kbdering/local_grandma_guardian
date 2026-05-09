@@ -408,18 +408,20 @@ async function analyzeWithGemma4(payload) {
 
                         if (json.done) {
                             hasResolved = true;
-                            // AGGRESSIVE VERDICT-FIRST CLEANING
+                            // AGGRESSIVE LAST-VERDICT CLEANING
                             let cleaned = fullText;
                             
                             // 1. Remove explicit <think> tags immediately
                             cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '');
                             
-                            // 2. Find the first legitimate verdict token: [SAFE], [SUSPICIOUS], or [DANGEROUS]
-                            const verdictIndex = cleaned.search(/\[(SAFE|SUSPICIOUS|DANGEROUS|BEZPIECZN|PODEJRZAN|NIEBEZPIECZN)\]/i);
+                            // 2. Find the LAST legitimate verdict token: [SAFE], [SUSPICIOUS], or [DANGEROUS]
+                            const verdictRegex = /\[(SAFE|SUSPICIOUS|DANGEROUS|BEZPIECZN|PODEJRZAN|NIEBEZPIECZN)\]/gi;
+                            const matches = Array.from(cleaned.matchAll(verdictRegex));
                             
-                            if (verdictIndex !== -1) {
-                                // Crop everything BEFORE the verdict (Thinking Process, intros, etc.)
-                                cleaned = cleaned.substring(verdictIndex);
+                            if (matches.length > 0) {
+                                // Pick the LAST match (the AI's final conclusion)
+                                const lastMatch = matches[matches.length - 1];
+                                cleaned = cleaned.substring(lastMatch.index);
                             } else {
                                 // Fallback: If no bracketed verdict, try to find a "Thinking Process:" and strip it
                                 cleaned = cleaned.replace(/thinking process:[\s\S]*?\n\n/gi, '');
@@ -432,11 +434,11 @@ async function analyzeWithGemma4(payload) {
 
                             if (!cleaned && fullThinking) {
                                 // Model put EVERYTHING in thinking — extract only the verdict line
-                                const verdictMatch = fullThinking.match(/\[(SAFE|DANGEROUS|SUSPICIOUS)\][^]*/i);
+                                const verdictMatch = Array.from(fullThinking.matchAll(verdictRegex)).pop();
                                 cleaned = verdictMatch ? verdictMatch[0].trim() : fullThinking.trim();
-                                console.warn("🛡️ Scam Shield: [WARN] Model response was empty, extracted verdict from thinking block.");
+                                console.warn("🛡️ Scam Shield: [WARN] Model response was empty, extracted final verdict from thinking block.");
                             }
-                            console.log("🛡️ Scam Shield: AI Response Finalized (Aggressively Cleaned).");
+                            console.log("🛡️ Scam Shield: AI Response Finalized (Last-Verdict Logic).");
                             resolve(cleaned);
                             break;
                         }
