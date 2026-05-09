@@ -503,15 +503,21 @@ const scanFacebook = () => {
         const imageUrl = imgEl ? imgEl.src : null;
         
         if (text && text.length > 15) {
+            // --- ANTI-SPONSORED LOGIC ---
+            const isSponsored = text.includes("Sponsored") || text.includes("Sponsorowane") || text.includes("Płatna promocja");
+            
             post.dataset.scanned = "pending";
-            // Add a subtle border to show scanning is active on this unknown element
             post.style.transition = "filter 0.5s";
             post.classList.add('scamshield-blur');
             
+            if (isSponsored) {
+                console.log(`🛡️ Scam Shield: [SPONSORED] Detected paid ad: ${text.substring(0, 30)}...`);
+            }
+            
             chrome.runtime.sendMessage({ 
                 action: "scanFacebookPost", 
-                text,
-                image: imageUrl, // Send the post photo if found
+                text: `${isSponsored ? '[SPONSORED AD] ' : ''}${text}`, 
+                image: imageUrl,
                 isVisual: !!imageUrl
             }, (res) => {
                 post.dataset.scanned = "true";
