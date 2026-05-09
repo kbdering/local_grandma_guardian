@@ -520,15 +520,20 @@ const scanFacebook = () => {
 
 // --- GENERAL PAGE SCANNER ---
 const initialScan = () => {
-    if (window.scamShieldInitialDone || isYouTube || isFacebook || isTrusted) return;
-    window.scamShieldInitialDone = true;
+    if (window.scamShieldInitialDone || window.scamShieldScanInProgress) return;
     
     injectOverlay();
     console.log("🛡️ Scam Shield: [INITIAL SCAN] Checking page safety (Full Text + Visual)...");
     const text = document.body ? document.body.innerText.substring(0, 100000) : "";
+    
+    window.scamShieldScanInProgress = true;
     chrome.runtime.sendMessage(
         { action: "scanFullPage", text, url: window.location.href, domain: host, isVisual: true }, 
-        (res) => handleGeneralVerdict(res, globalOverlay)
+        (res) => {
+            window.scamShieldScanInProgress = false;
+            window.scamShieldInitialDone = true;
+            handleGeneralVerdict(res, globalOverlay);
+        }
     );
 };
 
@@ -636,15 +641,17 @@ const startWatchdog = () => {
         if (isFacebook) scanFacebook();
         
         // Periodic re-scan for general sites — runs silently, no overlay
-        if (!isYouTube && !isFacebook && window.scamShieldInitialDone && config.enablePeriodicScan) {
+        if (!isYouTube && !isFacebook && window.scamShieldInitialDone && config.enablePeriodicScan && !window.scamShieldScanInProgress) {
             const now = Date.now();
             if (!window.lastPeriodicScan || (now - window.lastPeriodicScan > 30000)) {
                 console.log("🛡️ Scam Shield: [PERIODIC] Running silent re-scan (Full Text + Visual)...");
                 window.lastPeriodicScan = now;
                 const text = document.body ? document.body.innerText.substring(0, 100000) : "";
+                window.scamShieldScanInProgress = true;
                 chrome.runtime.sendMessage(
                     { action: "scanFullPage", text, url: window.location.href, domain: host, isVisual: true },
                     (res) => {
+                        window.scamShieldScanInProgress = false;
                         if (res && res.result) {
                             console.log(`🛡️ Scam Shield: [PERIODIC RESULT] ${res.result.substring(0, 100)}...`);
                             const firstLine = res.result.split('\n').find(l => l.trim().length > 0) || res.result;
