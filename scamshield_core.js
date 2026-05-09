@@ -31,8 +31,9 @@ let siteSelectors = {
         thumbnail: "ytd-thumbnail, #thumbnail"
     },
     facebook: {
-        card: "div[role='article']",
-        title: "span[dir='auto']",
+        card: 'div[role="article"], .x1yzt60o, [data-testid="fbfeed_story"]',
+        title: 'h3, [dir="auto"]',
+        chat: '[role="main"] [role="row"], .x78zum5.xdt5ytf.x1iyjqo2.x6ikm8r.x10wlt62',
         thumbnail: "img"
     }
 };
@@ -413,23 +414,38 @@ const scanWatchPage = () => {
 
 // --- CORE SCANNER: FACEBOOK ---
 const scanFacebook = () => {
-    const posts = document.querySelectorAll(siteSelectors.facebook.card);
-    posts.forEach(post => {
+    let posts = document.querySelectorAll(siteSelectors.facebook.card);
+    
+    // Messenger Fallback: Scan chat bubbles
+    const chatBubbles = document.querySelectorAll(siteSelectors.facebook.chat);
+    
+    // DISCOVERY MODE: If no posts found, try a broad fallback for anything that looks like a text block
+    if (posts.length === 0 && chatBubbles.length === 0) {
+        posts = document.querySelectorAll('div > div > span[dir="auto"]');
+    }
+
+    const allElements = [...posts, ...chatBubbles];
+    
+    allElements.forEach(post => {
         if (post.dataset.scanned) return;
-        post.classList.add('scamshield-blur');
         
+        // Find text: either from standard title selector or the element itself
         const titleEl = post.querySelector(siteSelectors.facebook.title);
-        const text = titleEl ? (titleEl.innerText || titleEl.textContent).trim() : "";
+        const text = (titleEl ? titleEl.innerText : (post.innerText || post.textContent)).trim();
         
-        if (text && text.length > 10) {
+        if (text && text.length > 15) {
             post.dataset.scanned = "pending";
+            // Add a subtle border to show scanning is active on this unknown element
+            post.style.transition = "filter 0.5s";
+            post.classList.add('scamshield-blur');
+            
             chrome.runtime.sendMessage({ action: "scanFacebookPost", text }, (res) => {
                 post.dataset.scanned = "true";
                 if (res && res.result && (res.result.includes("[SAFE]") || res.result.toUpperCase().includes("SAFE"))) {
                     post.classList.remove('scamshield-blur');
                     post.classList.add('scamshield-safe');
                 } else {
-                    console.warn(`🛡️ Scam Shield: [BLOCKED FB] ${text.substring(0, 50)}...`);
+                    console.warn(`🛡️ Scam Shield: [BLOCKED FB/MSG] Found threat in: ${text.substring(0, 50)}...`);
                 }
             });
         }
