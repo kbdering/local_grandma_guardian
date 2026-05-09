@@ -162,7 +162,18 @@ const YT_CARD_SELECTOR = "ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-v
 
 const scanCards = () => {
     const cardSelector = config.ytOverride || YT_CARD_SELECTOR;
-    const cards = document.querySelectorAll(cardSelector);
+    let cards;
+    try {
+        cards = document.querySelectorAll(cardSelector);
+    } catch (e) {
+        console.error("🛡️ Scam Shield: [INVALID SELECTOR] Resetting YT override.", cardSelector);
+        chrome.storage.local.get("config", (data) => {
+            const newConfig = { ...data.config, ytOverride: null };
+            chrome.storage.local.set({ config: newConfig });
+            config.ytOverride = null;
+        });
+        return;
+    }
     
     if (cards.length === 0 && isYouTube) {
         discoverNewSelectors('youtube', YT_CARD_SELECTOR);
@@ -447,7 +458,18 @@ const discoverNewSelectors = (platform, sampleSelector) => {
 const scanFacebook = () => {
     // Use override if exists
     const cardSelector = config.fbOverride || siteSelectors.facebook.card;
-    let posts = document.querySelectorAll(cardSelector);
+    let posts;
+    try {
+        posts = document.querySelectorAll(cardSelector);
+    } catch (e) {
+        console.error("🛡️ Scam Shield: [INVALID SELECTOR] Resetting FB override.", cardSelector);
+        chrome.storage.local.get("config", (data) => {
+            const newConfig = { ...data.config, fbOverride: null };
+            chrome.storage.local.set({ config: newConfig });
+            config.fbOverride = null;
+        });
+        posts = document.querySelectorAll(siteSelectors.facebook.card);
+    }
     
     // Messenger Fallback: Scan chat bubbles
     const chatBubbles = document.querySelectorAll(siteSelectors.facebook.chat);

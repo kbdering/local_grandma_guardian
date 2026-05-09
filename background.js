@@ -155,8 +155,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             console.log(`🛡️ Scam Shield: [REPAIR] Asking AI to discover new selectors for ${request.domain}...`);
             analyzeWithGemma4({ ...requestData, prompt })
                 .then(res => {
-                    // Extract just the selector from the response (it might have quotes or brackets)
-                    const selector = res.replace(/\[|\]/g, '').trim().split('\n')[0];
+                    // CLEANER PARSER: Remove thinking blocks and extra talk
+                    let cleaned = res.replace(/<think>[\s\S]*?<\/think>/gi, ''); // Remove explicit <think> tags
+                    cleaned = cleaned.replace(/thinking process:[\s\S]*?\n/gi, ''); // Remove common "Thinking Process:" headers
+                    
+                    // Take the last non-empty line or the first thing in brackets/backticks
+                    const matches = cleaned.match(/`([^`]+)`|\[([^\]]+)\]/);
+                    let selector = matches ? (matches[1] || matches[2]) : cleaned.trim().split('\n').filter(l => l.length > 0).pop();
+                    
+                    // Final safety: remove trailing punctuation if AI was chatty
+                    selector = selector.replace(/[.!?]$/, '').trim();
+                    
                     sendResponse({ selector });
                 })
                 .catch(err => sendResponse({ error: err.message }));
