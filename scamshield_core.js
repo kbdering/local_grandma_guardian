@@ -154,7 +154,7 @@ const handleGeneralVerdict = (res, overlay) => {
 const scanCards = () => {
     const ytOverride = config.ytOverride || {};
     const cardSelector = ytOverride.card || YT_CARD_SELECTOR;
-    const titleSelector = ytOverride.title || '#video-title, #title, .ytd-reel-item-renderer #video-title';
+    const titleSelector = ytOverride.title || '#video-title, #title, #ad-title, .ytd-ad-slot-renderer #video-title, .ytd-reel-item-renderer #video-title, .ytd-ad-slot-renderer .yt-core-attributed-string';
     
     let cards;
     try {
