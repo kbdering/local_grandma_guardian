@@ -320,9 +320,11 @@ async function analyzeWithGemma4(payload) {
                 { role: 'user', content: payload.prompt }
             ],
             stream: true,
+            think: false, // API-level instruction to skip reasoning blocks
             options: payload.options || {
                 temperature: 0.1,
-                num_ctx: 4096
+                num_ctx: 4096,
+                think: false // Redundant safety in options
             }
         };
 
