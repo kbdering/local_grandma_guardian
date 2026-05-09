@@ -61,5 +61,11 @@
     },
     "marketplaceAlert": {
         "message": "🚨 UWAGA: Ta strona wygląda jak oszustwo na OLX/InPost! Proszę nic nie klikać."
+    },
+    "overlayErrorTitle": {
+        "message": "⚠️ BŁĄD SKANOWANIA"
+    },
+    "overlayErrorMsg": {
+        "message": "Nie udało się zweryfikować bezpieczeństwa strony (błąd Ollama). Sprawdź czy Twój lokalny serwer AI jest uruchomiony."
     }
 }

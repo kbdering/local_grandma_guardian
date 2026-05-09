@@ -61,5 +61,11 @@
     },
     "marketplaceAlert": {
         "message": "🚨 WARNING: This page looks like an OLX/InPost scam! Do not click anything."
+    },
+    "overlayErrorTitle": {
+        "message": "⚠️ SCAN ERROR"
+    },
+    "overlayErrorMsg": {
+        "message": "Could not verify page safety (Ollama error). Please check if your local AI is running."
     }
 }
