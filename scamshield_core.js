@@ -465,7 +465,9 @@ const startSpeechScan = () => {
     speechRecognition.onresult = (event) => {
         for (let i = event.resultIndex; i < event.results.length; i++) {
             if (event.results[i].isFinal) {
-                speechTranscript += event.results[i][0].transcript + " ";
+                const text = event.results[i][0].transcript.trim();
+                console.log(`🛡️ Scam Shield: 🎙️ Speech Detected: "${text}"`);
+                speechTranscript += text + " ";
             }
         }
     };
@@ -520,8 +522,9 @@ if (!window.scamShieldSpeechInited) {
 // Periodically send accumulated transcript for analysis
 setInterval(() => {
     if (speechTranscript.trim().length > 20) {
-        console.log(`🛡️ Scam Shield: [SPEECH] Analyzing ${speechTranscript.length} chars of speech...`);
-        chrome.runtime.sendMessage({ action: "scanSpeech", text: speechTranscript.trim() }, (res) => {
+        const textToScan = speechTranscript.trim();
+        console.log(`🛡️ Scam Shield: [SPEECH] Analyzing transcript: "${textToScan}"`);
+        chrome.runtime.sendMessage({ action: "scanSpeech", text: textToScan }, (res) => {
             if (res && res.result && (res.result.includes("[DANGEROUS]") || res.result.includes("[SUSPICIOUS]"))) {
                 injectOverlay();
                 handleGeneralVerdict(res, globalOverlay);
