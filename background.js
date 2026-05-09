@@ -107,7 +107,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
         const requestData = {
             model: config.aiModel || 'gemma2:2b',
-            system: grandmaContext
+            system: grandmaContext,
+            options: {
+                num_ctx: 8192, // Increased context window for full-text scanning
+                temperature: 0.1
+            }
         };
 
         if (request.action === "scanFullPage") {
