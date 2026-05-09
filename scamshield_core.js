@@ -46,58 +46,49 @@ const injectIronCurtain = () => {
     const style = document.createElement('style');
     style.id = 'scamshield-lockdown';
     style.textContent = `
-        /* General blur for non-YouTube elements */
+        /* General security states */
         .scamshield-blur { 
             filter: blur(25px) grayscale(1) !important; 
             pointer-events: none !important;
-            transition: filter 0.5s ease !important;
+            transition: filter 0.6s ease, opacity 0.6s ease !important;
+        }
+        .scamshield-hidden { 
+            opacity: 0 !important; 
+            visibility: hidden !important; 
+            pointer-events: none !important;
+            transition: opacity 0.8s ease !important;
         }
         .scamshield-safe { 
             filter: none !important; 
+            opacity: 1 !important; 
+            visibility: visible !important;
             pointer-events: auto !important;
-            display: revert !important;
-            opacity: 1 !important;
+            transition: opacity 0.6s ease, filter 0.6s ease !important;
         }
+
+        /* YouTube specific hiding */
         ${isYouTube ? `
-        /* CSS-FIRST: HIDE YouTube cards completely until verified */
         ytd-rich-item-renderer:not(.scamshield-safe),
         ytd-video-renderer:not(.scamshield-safe),
         ytd-grid-video-renderer:not(.scamshield-safe),
         ytd-compact-video-renderer:not(.scamshield-safe) {
             display: none !important;
         }
-        /* Smooth reveal animation when verified safe */
-        ytd-rich-item-renderer.scamshield-safe,
-        ytd-video-renderer.scamshield-safe,
-        ytd-grid-video-renderer.scamshield-safe,
-        ytd-compact-video-renderer.scamshield-safe {
-            animation: scamshield-reveal 0.3s ease forwards;
-        }
-        @keyframes scamshield-reveal {
-            from { opacity: 0; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1); }
-        }
-        /* Watch page: blur the video player until verified */
-        .scamshield-video-blur #movie_player video,
-        .scamshield-video-blur .html5-video-container {
-            filter: blur(30px) grayscale(1) !important;
-            transition: filter 0.5s ease !important;
-        }
-        .scamshield-video-safe #movie_player video,
-        .scamshield-video-safe .html5-video-container {
-            filter: none !important;
-        }` : ''}
+        ` : ''}
+
+        /* Global Warning Overlays */
         #scamshield-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.85); z-index: 999999;
+            background: rgba(0,0,0,0.92); z-index: 2147483647;
             display: flex; align-items: center; justify-content: center;
             flex-direction: column; color: white; font-family: sans-serif;
+            text-align: center; padding: 20px; backdrop-filter: blur(15px);
         }
-        #scamshield-overlay h1 { font-size: 2em; margin-bottom: 10px; }
-        #scamshield-overlay p { font-size: 1.2em; max-width: 600px; text-align: center; }
+        #scamshield-overlay h1 { font-size: 2.5em; margin-bottom: 15px; }
+        #scamshield-overlay p { font-size: 1.3em; max-width: 700px; line-height: 1.6; }
         #scamshield-overlay .safe { color: #4caf50; }
-        #scamshield-overlay .danger { color: #f44336; }
-        #scamshield-overlay .suspicious { color: #ff9800; }
+        #scamshield-overlay .danger { color: #ff5252; font-weight: bold; }
+        #scamshield-overlay .suspicious { color: #ffab40; }
     `;
     (document.head || document.documentElement).appendChild(style);
 };
@@ -507,8 +498,8 @@ const scanFacebook = () => {
             const isSponsored = text.includes("Sponsored") || text.includes("Sponsorowane") || text.includes("Płatna promocja");
             
             post.dataset.scanned = "pending";
-            post.style.transition = "filter 0.5s";
-            post.classList.add('scamshield-blur');
+            post.style.transition = "opacity 0.8s ease, filter 0.5s";
+            post.classList.add('scamshield-hidden');
             
             if (isSponsored) {
                 console.log(`🛡️ Scam Shield: [SPONSORED] Detected paid ad: ${text.substring(0, 30)}...`);
@@ -522,10 +513,13 @@ const scanFacebook = () => {
             }, (res) => {
                 post.dataset.scanned = "true";
                 if (res && res.result && (res.result.includes("[SAFE]") || res.result.toUpperCase().includes("SAFE"))) {
-                    post.classList.remove('scamshield-blur');
+                    post.classList.remove('scamshield-hidden');
                     post.classList.add('scamshield-safe');
                 } else {
                     console.warn(`🛡️ Scam Shield: [BLOCKED FB/MSG] Found threat in: ${text.substring(0, 50)}...`);
+                    // Reveal it but keep it BLURRED if it's dangerous, so the warning overlay can be seen on top
+                    post.classList.remove('scamshield-hidden');
+                    post.classList.add('scamshield-blur');
                 }
             });
         }
