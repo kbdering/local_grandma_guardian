@@ -408,15 +408,28 @@ async function analyzeWithGemma4(payload) {
 
                         if (json.done) {
                             hasResolved = true;
-                            // Strip <think>...</think> blocks some models embed in content
-                            let cleaned = fullText.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+                            // GLOBAL CLEANING
+                            let cleaned = fullText;
+                            
+                            // 1. Strip explicit <think> tags
+                            cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '');
+                            
+                            // 2. Strip "Thinking Process:" headers and their following text until two newlines
+                            cleaned = cleaned.replace(/thinking process:[\s\S]*?\n\n/gi, '');
+                            cleaned = cleaned.replace(/thinking process:[\s\S]*?\n/gi, '');
+                            
+                            // 3. Remove common AI conversational filler
+                            cleaned = cleaned.replace(/^(here is the analysis:|analysis:|result:)\s*/gi, '');
+                            
+                            cleaned = cleaned.trim();
+
                             if (!cleaned && fullThinking) {
                                 // Model put EVERYTHING in thinking — extract only the verdict line
                                 const verdictMatch = fullThinking.match(/\[(SAFE|DANGEROUS|SUSPICIOUS)\][^]*/i);
                                 cleaned = verdictMatch ? verdictMatch[0].trim() : fullThinking.trim();
                                 console.warn("🛡️ Scam Shield: [WARN] Model response was empty, extracted verdict from thinking block.");
                             }
-                            console.log("🛡️ Scam Shield: AI Response Finalized. Length:", cleaned.length);
+                            console.log("🛡️ Scam Shield: AI Response Finalized (Cleaned). Length:", cleaned.length);
                             resolve(cleaned);
                             break;
                         }
