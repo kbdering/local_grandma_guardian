@@ -468,13 +468,22 @@ const scanFacebook = () => {
         const titleEl = post.querySelector(siteSelectors.facebook.title);
         const text = (titleEl ? titleEl.innerText : (post.innerText || post.textContent)).trim();
         
+        // Find main image in the post
+        const imgEl = post.querySelector(siteSelectors.facebook.thumbnail);
+        const imageUrl = imgEl ? imgEl.src : null;
+        
         if (text && text.length > 15) {
             post.dataset.scanned = "pending";
             // Add a subtle border to show scanning is active on this unknown element
             post.style.transition = "filter 0.5s";
             post.classList.add('scamshield-blur');
             
-            chrome.runtime.sendMessage({ action: "scanFacebookPost", text }, (res) => {
+            chrome.runtime.sendMessage({ 
+                action: "scanFacebookPost", 
+                text,
+                image: imageUrl, // Send the post photo if found
+                isVisual: !!imageUrl
+            }, (res) => {
                 post.dataset.scanned = "true";
                 if (res && res.result && (res.result.includes("[SAFE]") || res.result.toUpperCase().includes("SAFE"))) {
                     post.classList.remove('scamshield-blur');

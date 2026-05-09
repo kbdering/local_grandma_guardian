@@ -164,8 +164,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
 
         else if (request.action === "scanChat" || request.action === "scanFacebookPost") {
-            const prompt = `Analyze this text. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Include a 1-sentence reason in language "${lang}".\n\nText: ${request.text}`;
-            analyzeWithGemma4({ ...requestData, prompt }).then(res => sendResponse({ result: res })).catch(err => sendResponse({ error: err.message }));
+            const analyze = (imageData) => {
+                const prompt = `Analyze this ${imageData ? 'text and image' : 'text'}. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Include a 1-sentence reason in language "${lang}".\n\nText: ${request.text}`;
+                analyzeWithGemma4({ ...requestData, prompt, images: imageData ? [imageData] : [] })
+                    .then(res => sendResponse({ result: res }))
+                    .catch(err => sendResponse({ error: err.message }));
+            };
+
+            if (request.isVisual && request.image) {
+                // Fetch image and convert to base64
+                fetch(request.image)
+                    .then(r => r.blob())
+                    .then(blob => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => analyze(reader.result.replace(/^data:image\/[a-z]+;base64,/, ''));
+                        reader.readAsDataURL(blob);
+                    })
+                    .catch(() => analyze(null)); // Fallback to text-only if fetch fails
+            } else {
+                analyze(null);
+            }
+            return true;
         }
 
         else if (request.action === "scanYouTubeBatch") {
