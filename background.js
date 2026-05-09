@@ -59,19 +59,19 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 const grandmaContext = `You are "Cybersecurity Grandma", a protective, wise, and highly suspicious security expert. Your ONLY job is to protect users from threats.
 
 DANGEROUS — Flag these as [DANGEROUS] immediately:
-- FINANCIAL SCAMS: Unrealistic profits (e.g., "15k in 10 days"), guaranteed returns, secret investment "technologies", or claims that "banks don't want you to know" about a system.
+- FINANCIAL SCAMS: Unrealistic profits (e.g., "15k in 10 days"), guaranteed returns, secret investment "technologies", or claims that "banks don't want you to know".
+- MISINFORMATION & HYPE: Fear-mongering news, "Miracle cures", "Hidden truth about [X]", "Government is hiding this", or dramatic panic-inducing claims.
 - CELEBRITY SCAMS: Names like Elon Musk, Bezos, or local billionaires combined with "scandal", "secret method", or "earnings platform".
 - URGENCY & THREATS: "Your account will be deleted", "Police warrant issued", "Immediate action required", or BLIK code requests.
-- PHISHING: Asking for passwords, PESEL, bank logins, or suspicious "verification" links on weird domains (.xyz, .finance).
-- REMOTE ACCESS: Mentions of AnyDesk, TeamViewer, or "help from an assistant" to set up an account.
+- PHISHING: Asking for passwords, PESEL, bank logins, or suspicious "verification" links.
 
 SUSPICIOUS — Flag as [SUSPICIOUS]:
-- Extreme clickbait, dramatic miracle cures, or "get rich" stories without a clear source.
+- Extreme clickbait, excessive drama, or "get rich" stories without verified sources.
 
 SAFE:
 - Actual news, education, weather, hobbies, and normal shopping on reputable domains.
 
-Your tone: Protective but professional. If you see a story about someone making thousands of euros quickly or a "secret the banks hide", it is 100% a SCAM. 
+Your tone: Protective but professional. If you see panic-inducing news or miracle claims, it is 100% DANGEROUS.
 RESPONSE FORMAT: Start with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Then a 1-sentence reason.`;
 
 console.log("🛡️ Scam Shield: Background Worker starting...");
@@ -208,15 +208,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             const cached = getCached(cacheKey);
             if (cached) { sendResponse({ result: cached }); return; }
 
-            const ytBatchSystem = `You are a YouTube security filter. Your ONLY job is to flag scam titles.
+            const ytBatchSystem = `You are a YouTube security filter. Your ONLY job is to flag scam titles and dangerous misinformation.
 
 DANGER (Flag as DANGER immediately):
 - ANY "Giveaway", "Airdrop", or "Free crypto" (Elon Musk, MrBeast, etc.)
-- ANY "Live" price predictions or "Secret" investment platforms.
-- "Promoted" or Ad content that uses celebrity deepfakes or promises free money.
-- Deceptive clickbait about death, scandals, or "hidden truth" meant to steal clicks for fraud.
+- EXAGGERATED HYPE: "MIRACLE", "REVEALED", "SECRET THEY HIDE", "END OF THE WORLD", "GLOBAL RESET".
+- MISINFORMATION: "The truth about vaccines", "Hidden government agenda", "Banks are collapsing".
+- Deceptive clickbait about death, scandals, or "hidden truth" meant to steal clicks.
 
-IMPORTANT: Normal YouTube hype is okay, but if it promises FREE MONEY, FREE CRYPTO, or a "SECRET SYSTEM", it is 100% DANGER.`;
+IMPORTANT: Normal YouTube hype (gaming, reviews) is okay, but if it promotes FEAR or MIRACLE SYSTEMS, it is 100% DANGER.`;
 
             const prompt = `For each title below, reply with ONLY "SAFE" or "DANGER" on a new line. No numbering, no explanations.\n\n${request.titles.map((t, i) => `${i + 1}. ${t}`).join("\n")}`;
             analyzeWithGemma4({ ...getRequestData(prompt), system: ytBatchSystem, prompt })
