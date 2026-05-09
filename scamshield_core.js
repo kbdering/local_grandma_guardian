@@ -442,6 +442,7 @@ const initialScan = () => {
 
 // --- SPEECH-TO-TEXT SCANNER ---
 let speechRecognition = null;
+let speechTranscript = ""; // Global to persist across tab visibility toggles
 
 const startSpeechScan = () => {
     if (!config.enableSpeechScan) return;
@@ -461,12 +462,10 @@ const startSpeechScan = () => {
     speechRecognition.interimResults = false;
     speechRecognition.lang = chrome.i18n.getUILanguage() || 'pl';
     
-    let transcript = "";
-    
     speechRecognition.onresult = (event) => {
         for (let i = event.resultIndex; i < event.results.length; i++) {
             if (event.results[i].isFinal) {
-                transcript += event.results[i][0].transcript + " ";
+                speechTranscript += event.results[i][0].transcript + " ";
             }
         }
     };
@@ -518,20 +517,19 @@ if (!window.scamShieldSpeechInited) {
     });
 }
     
-    // Periodically send accumulated transcript for analysis
-    setInterval(() => {
-        if (transcript.trim().length > 20) {
-            console.log(`🛡️ Scam Shield: [SPEECH] Analyzing ${transcript.length} chars of speech...`);
-            chrome.runtime.sendMessage({ action: "scanSpeech", text: transcript.trim() }, (res) => {
-                if (res && res.result && (res.result.includes("[DANGEROUS]") || res.result.includes("[SUSPICIOUS]"))) {
-                    injectOverlay();
-                    handleGeneralVerdict(res, globalOverlay);
-                }
-            });
-            transcript = "";
-        }
-    }, config.speechScanInterval || 30000);
-};
+// Periodically send accumulated transcript for analysis
+setInterval(() => {
+    if (speechTranscript.trim().length > 20) {
+        console.log(`🛡️ Scam Shield: [SPEECH] Analyzing ${speechTranscript.length} chars of speech...`);
+        chrome.runtime.sendMessage({ action: "scanSpeech", text: speechTranscript.trim() }, (res) => {
+            if (res && res.result && (res.result.includes("[DANGEROUS]") || res.result.includes("[SUSPICIOUS]"))) {
+                injectOverlay();
+                handleGeneralVerdict(res, globalOverlay);
+            }
+        });
+        speechTranscript = "";
+    }
+}, 30000);
 
 // --- WATCHDOG ---
 const startWatchdog = () => {
