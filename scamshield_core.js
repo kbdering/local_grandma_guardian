@@ -188,51 +188,25 @@ const scanCards = () => {
         let title = "";
         let extractSource = "";
         
-        // 1. yt-formatted-string#video-title (classic layout)
+        // 1. Universal Title Extraction (Multiple selectors)
         const videoTitle = card.querySelector(titleSelector);
         if (videoTitle) {
-            title = (videoTitle.title || videoTitle.getAttribute('aria-label') || videoTitle.innerText || "").trim();
+            title = (videoTitle.title || videoTitle.getAttribute('aria-label') || videoTitle.innerText || videoTitle.textContent || "").trim();
             if (title) extractSource = titleSelector;
         }
         
-        // 2. Title link specifically (not the thumbnail link)
-        if (!title || title.length <= 5) {
-            const titleLink = card.querySelector('a#video-title-link, h3 a[href*="/watch"]');
-            if (titleLink) {
-                title = (titleLink.title || titleLink.getAttribute('aria-label') || "").trim();
-                if (title) extractSource = "title-link";
+        // --- DEEP HARVEST FALLBACK for Ads/Shorts ---
+        if (!title) {
+            const anyText = card.querySelector('.yt-core-attributed-string, #title-text, span[dir="auto"], h3');
+            if (anyText) {
+                title = anyText.innerText.trim();
+                if (title) extractSource = "deep-harvest-text";
             }
         }
         
-        // 3. Any <a> with a non-empty title attribute pointing to /watch
-        if (!title || title.length <= 5) {
-            const allLinks = card.querySelectorAll('a[href*="/watch"]');
-            for (const link of allLinks) {
-                const t = (link.title || link.getAttribute('aria-label') || "").trim();
-                if (t && t.length > 5 && !/^\d{1,2}:\d{2}/.test(t)) {
-                    title = t;
-                    extractSource = "a[watch]";
-                    break;
-                }
-            }
-        }
-        
-        // 4. Lockup metadata (newer YouTube layouts)
-        if (!title || title.length <= 5) {
-            const lockup = card.querySelector('.yt-lockup-metadata-view-model-wiz__title');
-            if (lockup) {
-                title = (lockup.innerText || lockup.textContent || "").trim();
-                if (title) extractSource = "lockup-meta";
-            }
-        }
-        
-        // 5. aria-label on the card itself (some layouts put the full title here)
-        if (!title || title.length <= 5) {
-            const ariaLabel = card.getAttribute('aria-label');
-            if (ariaLabel && ariaLabel.length > 5) {
-                title = ariaLabel.trim();
-                extractSource = "card-aria";
-            }
+        if (!title && card.getAttribute('aria-label')) {
+            title = card.getAttribute('aria-label').trim();
+            extractSource = "aria-label";
         }
         
         // Strip duration metadata that YouTube appends to title/aria-label
@@ -242,7 +216,8 @@ const scanCards = () => {
         // Filter garbage
         const isTimestamp = /^\d{1,2}:\d{2}(:\d{2})?$/.test(title);
         const isUILabel = ['obejrzyj', 'watch', 'shorts', 'składanka', 'mix', 'teraz grasz', 'now playing'].includes(title.toLowerCase());
-        const isValidTitle = title && title.length > 5 && !isTimestamp && !isUILabel;
+        const isAd = card.tagName.includes('AD-SLOT');
+        const isValidTitle = title && (isAd || title.length > 5) && !isTimestamp && !isUILabel;
         
         if (isValidTitle) {
             card.dataset.scanned = "pending";
@@ -274,7 +249,14 @@ const scanCards = () => {
 
 // --- THUMBNAIL VISUAL SCAN (fallback when title extraction fails) ---
 const scanThumbnail = (card) => {
-    const img = card.querySelector('img');
+    // Visual fallback: Try to find ANY image in the card if title extraction failed
+    const imgSelector = 'ytd-thumbnail img, #thumbnail img, yt-image img, .ytd-ad-slot-renderer img, img.style-scope.yt-img-shadow';
+    const img = card.querySelector(imgSelector);
+    
+    if (img && img.src && img.src.startsWith('http')) {
+        console.log(`🛡️ Scam Shield: [VISUAL-FALLBACK] Scanning ad/thumbnail for: ${card.tagName}`);
+    }
+
     if (!img || !img.src || img.src.startsWith('data:')) {
         console.warn("🛡️ Scam Shield: [VISUAL] No thumbnail found for card. Resetting for future rescan.");
         // Reset the card so future scan cycles can retry once YouTube hydrates
