@@ -150,6 +150,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             return true; // Keep channel open for async capture
         }
 
+        else if (request.action === "discoverSelectors") {
+            const prompt = `You are a web scraper assistant. Analyze this HTML structure from ${request.domain} and find the most stable CSS selector for a "social media post" or "main content card" container. Reply with ONLY the CSS selector string, no explanation.\n\nHTML Snippet:\n${request.html}`;
+            console.log(`🛡️ Scam Shield: [REPAIR] Asking AI to discover new selectors for ${request.domain}...`);
+            analyzeWithGemma4({ ...requestData, prompt })
+                .then(res => {
+                    // Extract just the selector from the response (it might have quotes or brackets)
+                    const selector = res.replace(/\[|\]/g, '').trim().split('\n')[0];
+                    sendResponse({ selector });
+                })
+                .catch(err => sendResponse({ error: err.message }));
+            return true;
+        }
+
         else if (request.action === "scanChat" || request.action === "scanFacebookPost") {
             const prompt = `Analyze this text. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Include a 1-sentence reason in language "${lang}".\n\nText: ${request.text}`;
             analyzeWithGemma4({ ...requestData, prompt }).then(res => sendResponse({ result: res })).catch(err => sendResponse({ error: err.message }));

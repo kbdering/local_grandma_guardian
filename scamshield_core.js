@@ -414,13 +414,33 @@ const scanWatchPage = () => {
 
 // --- CORE SCANNER: FACEBOOK ---
 const scanFacebook = () => {
-    let posts = document.querySelectorAll(siteSelectors.facebook.card);
+    // Use override if exists
+    const cardSelector = config.fbOverride || siteSelectors.facebook.card;
+    let posts = document.querySelectorAll(cardSelector);
     
     // Messenger Fallback: Scan chat bubbles
     const chatBubbles = document.querySelectorAll(siteSelectors.facebook.chat);
     
-    // DISCOVERY MODE: If no posts found, try a broad fallback for anything that looks like a text block
-    if (posts.length === 0 && chatBubbles.length === 0) {
+    // HEALING MODE: If no posts found, trigger AI discovery
+    if (posts.length === 0 && chatBubbles.length === 0 && !window.scamShieldHealing) {
+        window.scamShieldHealing = true;
+        console.warn("🛡️ Scam Shield: [HEALING] No elements found. Attempting AI Self-Repair...");
+        
+        // Grab a structure-only snapshot of the page (tags and classes only)
+        const html = Array.from(document.querySelectorAll('div')).slice(0, 50).map(el => `<${el.tagName.toLowerCase()} class="${el.className}">`).join('\n');
+        
+        chrome.runtime.sendMessage({ action: "discoverSelectors", domain: host, html }, (res) => {
+            if (res && res.selector) {
+                console.log(`🛡️ Scam Shield: [HEALED] AI discovered new selector: ${res.selector}`);
+                chrome.storage.local.get("config", (data) => {
+                    const newConfig = { ...data.config, fbOverride: res.selector };
+                    chrome.storage.local.set({ config: newConfig });
+                    config.fbOverride = res.selector; // Update local state
+                });
+            }
+        });
+        
+        // Immediate fallback while waiting for AI
         posts = document.querySelectorAll('div > div > span[dir="auto"]');
     }
 
