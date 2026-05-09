@@ -157,9 +157,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
 
         else if (request.action === "discoverSelectors") {
-            const prompt = `You are a web scraper assistant. Analyze this HTML structure from ${request.domain} and find the most stable CSS selector for a "social media post" or "main content card" container. Reply with ONLY the CSS selector string, no explanation.\n\nHTML Snippet:\n${request.html}`;
+            const system = "You are a web scraper assistant. Reply ONLY with the CSS selector. No conversational text, no brackets, no security analysis.";
+            const prompt = `Analyze this HTML from ${request.domain} and find the most stable CSS selector for a "social media post" or "main content card" container. HTML:\n${request.html}`;
             console.log(`🛡️ Scam Shield: [REPAIR] Asking AI to discover new selectors for ${request.domain}...`);
-            analyzeWithGemma4({ ...getRequestData(prompt), prompt })
+            analyzeWithGemma4({ ...getRequestData(prompt), system, prompt })
                 .then(res => {
                     // CLEANER PARSER: Remove thinking blocks and extra talk
                     let cleaned = res.replace(/<think>[\s\S]*?<\/think>/gi, ''); // Remove explicit <think> tags
@@ -267,10 +268,11 @@ IMPORTANT: Normal YouTube hype (gaming, reviews) is okay, but if it promotes FEA
         }
 
         else if (request.action === "repairSiteSelectors") {
+            const system = "You are a web scraper assistant. Reply ONLY with a valid JSON object. No conversation.";
             const context = request.site === 'youtube' ? 'video containers and titles' : 'Facebook posts and Messenger messages';
             const jsonFormat = request.site === 'youtube' ? '{"card": "selector", "title": "selector"}' : '{"post": "selector", "message": "selector"}';
-            const prompt = `I am a security extension. ${request.site} layout changed and my selectors failed. Based on this HTML snippet, find the CSS selectors for the ${context}. Reply strictly with a JSON object: ${jsonFormat}. HTML: ${request.html}`;
-            analyzeWithGemma4({ ...getRequestData(prompt), prompt }).then(res => sendResponse({ result: res })).catch(err => sendResponse({ error: err.message }));
+            const prompt = `I am a security extension. ${request.site} layout changed. Based on this HTML snippet, find the CSS selectors for the ${context}. Reply strictly with a JSON object: ${jsonFormat}. HTML: ${request.html}`;
+            analyzeWithGemma4({ ...getRequestData(prompt), system, prompt }).then(res => sendResponse({ result: res })).catch(err => sendResponse({ error: err.message }));
         }
 
         else if (request.action === "requestFullScreenshot") {
