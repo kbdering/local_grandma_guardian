@@ -105,14 +105,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const lang = config.language || 'en';
         console.log(`🛡️ Scam Shield: Received message: ${request.action} (Lang: ${lang})`);
 
-        const requestData = {
+        // Dynamic Context Estimator: Adapts VRAM usage to the actual content
+        const estimateCtx = (promptText, responseBuffer = 500) => {
+            const estimatedTokens = Math.ceil(promptText.length / 3) + responseBuffer;
+            return Math.min(Math.max(estimatedTokens, 1024), 16384); // Clamp between 1k and 16k
+        };
+
+        const getRequestData = (prompt) => ({
             model: config.aiModel || 'gemma2:2b',
             system: grandmaContext,
             options: {
-                num_ctx: 8192, // Increased context window for full-text scanning
+                num_ctx: estimateCtx(prompt + (grandmaContext || "")),
                 temperature: 0.1
             }
-        };
+        });
 
         if (request.action === "scanFullPage") {
             // Check cache first
@@ -122,8 +128,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
             const analyze = (imageData) => {
                 const prompt = `URL: ${request.url}\nDOMAIN: ${request.domain}\n\nAnalyze this page ${imageData ? 'text and screenshot' : 'text'}. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Include a 1-sentence reason in language "${lang}" AND the exact suspicious quote as [Cytat: <tekst>].\n\nPage Text: ${request.text}`;
-                console.log(`🛡️ Scam Shield: [BG] Starting Full Page Scan (${request.text.length} chars${imageData ? ' + Image' : ''})...`);
-                analyzeWithGemma4({ ...requestData, prompt, images: imageData ? [imageData] : [] })
+                console.log(`🛡️ Scam Shield: [BG] Starting Full Page Scan (${request.text.length} chars, ctx: ${estimateCtx(prompt)})...`);
+                
+                analyzeWithGemma4({ ...getRequestData(prompt), prompt, images: imageData ? [imageData] : [] })
                     .then(res => {
                         console.log("🛡️ Scam Shield: [BG] Scan Complete. Sending response...");
                         setCache(cacheKey, res);
@@ -153,7 +160,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         else if (request.action === "discoverSelectors") {
             const prompt = `You are a web scraper assistant. Analyze this HTML structure from ${request.domain} and find the most stable CSS selector for a "social media post" or "main content card" container. Reply with ONLY the CSS selector string, no explanation.\n\nHTML Snippet:\n${request.html}`;
             console.log(`🛡️ Scam Shield: [REPAIR] Asking AI to discover new selectors for ${request.domain}...`);
-            analyzeWithGemma4({ ...requestData, prompt })
+            analyzeWithGemma4({ ...getRequestData(prompt), prompt })
                 .then(res => {
                     // CLEANER PARSER: Remove thinking blocks and extra talk
                     let cleaned = res.replace(/<think>[\s\S]*?<\/think>/gi, ''); // Remove explicit <think> tags
@@ -175,7 +182,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         else if (request.action === "scanChat" || request.action === "scanFacebookPost") {
             const analyze = (imageData) => {
                 const prompt = `Analyze this ${imageData ? 'text and image' : 'text'}. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Include a 1-sentence reason in language "${lang}".\n\nText: ${request.text}`;
-                analyzeWithGemma4({ ...requestData, prompt, images: imageData ? [imageData] : [] })
+                analyzeWithGemma4({ ...getRequestData(prompt), prompt, images: imageData ? [imageData] : [] })
                     .then(res => sendResponse({ result: res }))
                     .catch(err => sendResponse({ error: err.message }));
             };
@@ -221,7 +228,7 @@ SAFE — these are normal YouTube content, do NOT flag:
 IMPORTANT: Dramatic wording is a normal YouTube convention, NOT clickbait. Only flag titles that are genuinely deceptive or promote harmful content.`;
 
             const prompt = `For each title below, reply with ONLY "SAFE" or "DANGER" on a new line. No numbering, no explanations.\n\n${request.titles.map((t, i) => `${i + 1}. ${t}`).join("\n")}`;
-            analyzeWithGemma4({ ...requestData, system: ytBatchSystem, prompt })
+            analyzeWithGemma4({ ...getRequestData(prompt), system: ytBatchSystem, prompt })
                 .then(res => {
                     console.log("🛡️ Scam Shield: [BATCH] Raw AI response:", res);
                     const lines = res.split("\n").map(l => l.toUpperCase());
@@ -255,24 +262,24 @@ IMPORTANT: Dramatic wording is a normal YouTube convention, NOT clickbait. Only 
 
             const descPart = request.description ? `\n\nDescription: ${request.description}` : '';
             const prompt = `Analyze this YouTube video metadata. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Include a 1-sentence reason in language "${lang}" AND the exact suspicious quote as [Cytat: <tekst>].\n\nTitle: ${request.title}${descPart}`;
-            analyzeWithGemma4({ ...requestData, prompt }).then(res => { setCache(cacheKey, res); sendResponse({ result: res }); }).catch(err => sendResponse({ error: err.message }));
+            analyzeWithGemma4({ ...getRequestData(prompt), prompt }).then(res => { setCache(cacheKey, res); sendResponse({ result: res }); }).catch(err => sendResponse({ error: err.message }));
         }
 
         else if (request.action === "scanSpeech") {
             const prompt = `Analyze this speech transcript. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Include a 1-sentence reason in language "${lang}" AND the exact suspicious quote as [Cytat: <tekst>].\n\nTranscript: ${request.text}`;
-            analyzeWithGemma4({ ...requestData, prompt }).then(res => sendResponse({ result: res })).catch(err => sendResponse({ error: err.message }));
+            analyzeWithGemma4({ ...getRequestData(prompt), prompt }).then(res => sendResponse({ result: res })).catch(err => sendResponse({ error: err.message }));
         }
 
         else if (request.action === "scanScreenshot") {
             const prompt = `Analyze this screenshot. Reply strictly with [SAFE], [SUSPICIOUS], or [DANGEROUS]. Include a 1-sentence reason in language "${lang}" AND the exact suspicious text found as [Cytat: <tekst>].`;
-            analyzeWithGemma4({ ...requestData, prompt, images: [request.image.replace(/^data:image\/[a-z]+;base64,/, '')] }).then(res => sendResponse({ result: res })).catch(err => sendResponse({ error: err.message }));
+            analyzeWithGemma4({ ...getRequestData(prompt), prompt, images: [request.image.replace(/^data:image\/[a-z]+;base64,/, '')] }).then(res => sendResponse({ result: res })).catch(err => sendResponse({ error: err.message }));
         }
 
         else if (request.action === "repairSiteSelectors") {
             const context = request.site === 'youtube' ? 'video containers and titles' : 'Facebook posts and Messenger messages';
             const jsonFormat = request.site === 'youtube' ? '{"card": "selector", "title": "selector"}' : '{"post": "selector", "message": "selector"}';
             const prompt = `I am a security extension. ${request.site} layout changed and my selectors failed. Based on this HTML snippet, find the CSS selectors for the ${context}. Reply strictly with a JSON object: ${jsonFormat}. HTML: ${request.html}`;
-            analyzeWithGemma4({ ...requestData, prompt }).then(res => sendResponse({ result: res })).catch(err => sendResponse({ error: err.message }));
+            analyzeWithGemma4({ ...getRequestData(prompt), prompt }).then(res => sendResponse({ result: res })).catch(err => sendResponse({ error: err.message }));
         }
 
         else if (request.action === "requestFullScreenshot") {
