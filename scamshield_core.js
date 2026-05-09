@@ -125,6 +125,7 @@ const handleGeneralVerdict = (res, overlay) => {
         return;
     }
     const result = res.result;
+    console.log(`🛡️ Scam Shield: [VERDICT] ${result.substring(0, 200)}...`);
     // Only check the FIRST meaningful line for the verdict — don't match reasoning text
     const firstLine = result.split('\n').find(l => l.trim().length > 0) || result;
     if (firstLine.includes("[SAFE]") || (firstLine.toUpperCase().startsWith("SAFE") || firstLine.toUpperCase().startsWith("[SAFE"))) {
@@ -554,6 +555,7 @@ const startWatchdog = () => {
                     { action: "scanFullPage", text, url: window.location.href, domain: host },
                     (res) => {
                         if (res && res.result) {
+                            console.log(`🛡️ Scam Shield: [PERIODIC RESULT] ${res.result.substring(0, 100)}...`);
                             const firstLine = res.result.split('\n').find(l => l.trim().length > 0) || res.result;
                             if (firstLine.includes("[DANGEROUS]") || firstLine.includes("[SUSPICIOUS]")) {
                                 injectOverlay();
