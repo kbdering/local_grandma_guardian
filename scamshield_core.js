@@ -119,6 +119,15 @@ const injectOverlay = () => {
 
 const handleGeneralVerdict = (res, overlay) => {
     if (!overlay) return;
+    if (res && res.error) {
+        console.error("🛡️ Scam Shield: [VERDICT ERROR]", res.error);
+        overlay.innerHTML = `
+            <h1 class="suspicious">⚠️ SCAN ERROR</h1>
+            <p>Could not verify page safety (Ollama error). Please check if your local AI is running.</p>
+            <p style="font-size: 0.8em; color: #888;">Error: ${res.error}</p>
+        `;
+        return;
+    }
     if (!res || !res.result) {
         overlay.remove();
         globalOverlay = null;
